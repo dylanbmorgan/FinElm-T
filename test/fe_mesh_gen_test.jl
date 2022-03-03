@@ -1,5 +1,3 @@
-include("../src/fe_mesh_gen.jl")
-
 using MeshGen
 using Plots
 
