@@ -16,17 +16,17 @@ def mesh(bot,top,left,right):
     nnodesy = len(left)                    # number of vertical nodes 
     nelx = nnodesx-1                       # number of horizontal elements
     nely = nnodesy-1                       # number of vertical elements
-    nnodes = nnodesx*nnodesy               # total number of nodes    
+    nnodes = nnodesx*nnodesy               # total number of nodes
 
     # dimensions of the domain
     lx = bot[nnodesx-1] - bot[0]           # length of the domain in x-direction (horizontal)
     ly = left[nnodesy-1] - left[0]         # length of the domain in y-direction (vertical)
-     
+
     # GENERATE COORDINATES OF NODES 'XYZ'
     XYZ = np.zeros((nnodes,2))            # two-column array [nnodes x 2] containing all nodal coordinates  
     for i in range(nnodesy):              # loop over all nodes on the vertical sides 
         yl = left[i] - left[0]            # distance between node 'i' and left-bottom node '1'
-        dy = right[i] - left[i]           # distance between the corresponing nodes j on top and bottom 
+        dy = right[i] - left[i]           # distance between the corresponing nodes j on top and bottom
 
         for j in range(nnodesx):          # loop over all nodes on the horizontal sides
             xb = bot[j] - bot[0]          # distance between node 'j' and bottom-left node '1' 
@@ -63,7 +63,7 @@ def mesh(bot,top,left,right):
 # 8 elements 
 bot = [0, 0.5, 1, 1.5, 2]                     # x-coordinates of bottom side nodes
 top = [0, 0.5, 1, 1.5, 2]                     # x-coordinates of top side nodes
-left = [0, 0.5, 1]                            # y-coordinates of left-hand side nodes 
+left = [0, 0.5, 1]                            # y-coordinates of left-hand side nodes
 right = [0.5, 0.75, 1]                        # y-coordinates nodes of right-hand side nodes
 
 #generate mesh
@@ -71,23 +71,22 @@ XYZ, CON, DOF = mesh(bot,top,left,right)
 
 # plot the mesh 
 plt.plot(XYZ[:, 0], XYZ[:, 1], 'sk')
+
+for i in range(len(CON)):
+    plt.fill(XYZ[CON[i, :], 0], XYZ[CON[i, :], 1], edgecolor='k', fill=False)
+
+for i in range(4):                             #loop over all nodes within an element
+    for j in range(len(CON)):                  #loop over all elements
+        sh=0.01
+        plt.text(XYZ[CON[j,i],0]+sh,XYZ[CON[j,i],1]+sh, CON[j,i])
+
+# Set chart title.
+plt.title("Mesh", fontsize=19)
+# Set x axis label.
+plt.xlabel("$x_1$", fontsize=10)
+# Set y axis label.
+plt.ylabel("$x_2$", fontsize=10)
+# Set size of tick labels.
+plt.tick_params(axis='both', which='major', labelsize=9)
+
 plt.show()
-
-# for i in range(len(CON)):
-#     plt.fill(XYZ[CON[i, :], 0], XYZ[CON[i, :], 1], edgecolor='k', fill=False)
-
-# for i in range(4):                             #loop over all nodes within an element
-#     for j in range(len(CON)):                  #loop over all elements
-#         sh=0.01
-#         plt.text(XYZ[CON[j,i],0]+sh,XYZ[CON[j,i],1]+sh, CON[j,i])
-
-# # Set chart title.
-# plt.title("Mesh", fontsize=19)
-# # Set x axis label.
-# plt.xlabel("$x_1$", fontsize=10)
-# # Set y axis label.
-# plt.ylabel("$x_2$", fontsize=10)
-# # Set size of tick labels.
-# plt.tick_params(axis='both', which='major', labelsize=9)
-
-# plt.show()
