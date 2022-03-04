@@ -1,5 +1,25 @@
 using Plots
 
+function elements(xpoints, ypoints, xstart, ystart, etop, eright)
+    # x-direction
+    bot = zeros(xpoints)
+    for (i,num) in enumerate(LinRange(xstart, eright, xpoints))
+        bot[i] = num
+    end
+
+    # y-direction
+    left = zeros(ypoints)
+    for (j,num) in enumerate(LinRange(ystart, etop, ypoints))
+        left[j] = num
+    end
+
+    right = copy(left)
+    top = copy(bot)
+
+    return bot, top, left, right
+end
+
+
 """
     mesh(bot, top, left, right)
 
@@ -45,7 +65,7 @@ function mesh(bot, top, left, right)
         end
     end
 
-    # Global DOF for each element (4-node (linear) quadrilateral element)
+    # Global DOFF for each element (4-node (linear) quadrilateral element)
     dof = zeros(Int, nel, 2 * 4)
     for i in 1:nel
         dof[i, :] = [con[i, 1]*2, con[i, 2] * 2 - 1, con[i, 2]*2, con[i, 2] * 
@@ -56,35 +76,24 @@ function mesh(bot, top, left, right)
     return xyz, con, dof
 end
 
-function elements(verts, npoints)
-    
-end
+xpoints = 20; ypoints = 20
 
-# Shape verticies 
-#top = [-2 2]
-#bottom = [-2 -0.5 0.5 2] 
-#left = [0 4 5]
-#right = [0 4 5]
+# Split num of points by area of each part of shape
+x1points = round(xpoints / 2)
+x2points = xpoints - x1points
+y1points = round(ypoints / 2)
+y2points = ypoints - y1points
 
-# Number of nodes in each direction
-#horiznodes = 10
-#vertnodes = 5
+bot1, top1, left1, right1 = elements(Int(x1points), Int(y1points), 0, 4, 5, 4)
+bot2, top2, left2, right2 = elements(Int(x2points), Int(y2points), 1.5, 0, 4, 2.5)
 
-bot = [0, 1, 2, 3, 4]
-top = [0, 1, 2, 3, 4]
-left = [0, 1, 2, 3, 4, 5]
-right = [0, 1, 2, 3, 4, 5]
-
-
-# TEST 8 elements
-#bot = [0, 0.5, 1, 1.5, 2]
-#top = [0, 0.5, 1, 1.5, 2]
-#left = [0, 0.5, 1]
-#right = [0.5, 0.75, 1]
-
-#generate mesh
-xyz, con, dof = mesh(bot,top,left,right)
+xyz1, con1, dof1 = mesh(bot1, top1, left1, right1)
+xyz2, con2, dof2 = mesh(bot2, top2, left2, right2)
 
 display(scatter(
-    xyz[:, 1], xyz[:, 2]
+    xyz1[:, 1], xyz1[:, 2]
+))
+
+display(scatter(
+    xyz2[:, 1], xyz2[:, 2]
 ))
