@@ -38,7 +38,7 @@ function mesh(bot, top, left, right)
 
     # Generate coords of nodes 'xyz'
     xyz = zeros(nnodes, 2)
-    for i in 1:nnodesy
+    Threads.@threads for i in 1:nnodesy
         yl = left[i] - left[1]
         dy = right[i] - left[i]
 
@@ -57,7 +57,7 @@ function mesh(bot, top, left, right)
     # Node nums for elements
     nel = nelx * nely
     con = zeros(nel, 4)
-    for i in 1:nely
+    Threads.@threads for i in 1:nely
         for j in 1:nelx
             con[j + (i-1)*nelx, :] = [(j-1) + (i-1)*nnodesx, j + (i-1)*nnodesx,
                                       (j-1) + i*nnodesx + 1, (j-1) + i*nnodesx]
@@ -66,7 +66,7 @@ function mesh(bot, top, left, right)
 
     # Global DOF for each element (4-node (linear) quadrilateral element)
     dof = zeros(Int, nel, 2 * 4)
-    for i in 1:nel
+    Threads.@threads for i in 1:nel
         dof[i, :] = [con[i, 1]*2, con[i, 2] * 2 - 1, con[i, 2]*2, con[i, 2] * 
                      2 + 1, con[i, 3]*2, con[i, 3] * 2 + 1, con[i, 4]*2, 
                      con[i, 4] * 2 + 1]
