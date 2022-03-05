@@ -61,13 +61,19 @@ def mesh(bot,top,left,right):
 # coordinates defining relevant external edges of the model  
 
 # 8 elements 
-bot = [0, 0.5, 1, 1.5, 2]                     # x-coordinates of bottom side nodes
-top = [0, 0.5, 1, 1.5, 2]                     # x-coordinates of top side nodes
-left = [0, 0.5, 1]                            # y-coordinates of left-hand side nodes
-right = [0.5, 0.75, 1]                        # y-coordinates nodes of right-hand side nodes
+bot = [0.0, 1.3333333333333333, 2.6666666666666665, 4.0]                     # x-coordinates of bottom side nodes
+top = [0.0, 1.3333333333333333, 2.6666666666666665, 4.0]                  # x-coordinates of top side nodes
+left = [0.0, 1.25, 2.5, 3.75, 5.0]                            # y-coordinates of left-hand side nodes
+right = [0.0, 1.25, 2.5, 3.75, 5.0]                        # y-coordinates nodes of right-hand side nodes
 
 #generate mesh
 XYZ, CON, DOF = mesh(bot,top,left,right)
+
+print(XYZ)
+print()
+print(CON)
+print()
+print(DOF)
 
 # plot the mesh 
 plt.plot(XYZ[:, 0], XYZ[:, 1], 'sk')
