@@ -110,7 +110,62 @@ end
 
 # New module shapefunctions
 
-# TODO Split into modules in different files
+function planestress(E, ν)
+    # Calculate plane stress
+    constant = E / (1 - (ν*ν))
+    mat = Array{Float64, [[1, ν, 0] [ν, 1, 0] [0, 0, 0.5*(1 - ν)]]}
+    C = constant * mat
+
+    return C
+end
+
+function cmat(ξ, η)
+    ξ += 1
+    cmat = 0.125 * (ξ + 3*η - ξ*η) + 0.625
+
+    return cmat
+end
+
+function shapefuncs(ξ, η)
+    N = zeros(Float64, 4)
+    N[1] = 0.25 * (1 - ξ) * (1 + η)
+    N[2] = 0.25 * (1 - ξ) * (1 - η)
+    N[3] = 0.25 * (1 + ξ) * (1 + η)
+    N[4] = 0.25 * (1 + ξ) * (1 - η)
+
+    return N
+end
+
+# New module elemental stiffness
+
+using LinearAlgebra
+
+function strain_displacement(realcoors, ξ, η)
+    # Natural coors of quadrilateral
+    natcoord = Array[[-1, 1, 1, -1] [-1, -1, 1, 1]]
+
+    # Derivatives of shape functions wrt natural coords
+    dNdnat = zeros((2, 4))
+    dNdnat[1,:]= 0.25 * natcoord[1,:] * (1+natcoord[2,:] * η)
+    dNdnat[2,:]= 0.25 * natcoord[2,:] * (1+natcoord[1,:] * ξ)
+
+    # Elemental Jacobian matrix
+    Jmat = dot(dNdnat,realcoors)
+    J = det(Jmat)
+
+    JmatInv = inv(Jmat)
+    dNdx = dot(JmatInv,dNdnat)
+
+    # TODO Implement the following python code
+    # dsB=np.zeros((3,8))
+    # dsB[0,0::2]=dNdx[0,:]
+    # dsB[1,1::2]=dNdx[1,:]
+    # dsB[2,0::2]=dNdx[1,:]
+    # dsB[2,1::2]=dNdx[0,:]
+
+    # return dsB
+end
+
 using Plots; gr()
 using LaTeXStrings
 
@@ -138,8 +193,8 @@ function main(points=20)
     end
 
     # Obtain mesh arrays for solid element sides
-    bot, top, left, right = elements(Int(xpoints), Int(ypoints), xstart,
-                                         ystart, etop, eright)
+    bot, top, left, right = elements(Int(xpoints), Int(ypoints), xstart, ystart,
+                                     etop, eright)
 
     xyz, con, dof = mesh(bot, top, left, right)
 
@@ -159,5 +214,4 @@ function main(points=20)
     display(meshgrid)
 end
 
-# TODO Parse arguments from the REPL
 main()
