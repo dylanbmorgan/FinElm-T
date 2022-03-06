@@ -111,15 +111,14 @@ end
 # New module shapefunctions
 
 function planestress(E, ν)
-    # Calculate plane stress
     constant = E / (1 - (ν*ν))
-    mat = Array{Float64, [[1, ν, 0] [ν, 1, 0] [0, 0, 0.5*(1 - ν)]]}
+    mat = [[1, ν, 0] [ν, 1, 0] [0, 0, 0.5*(1 - ν)]]
     C = constant * mat
 
     return C
 end
 
-function cmat(ξ, η)
+function cmat(ξ, η)  # Come back to this
     ξ += 1
     cmat = 0.125 * (ξ + 3*η - ξ*η) + 0.625
 
@@ -142,7 +141,7 @@ using LinearAlgebra
 
 function strain_displacement(realcoors, ξ, η)
     # Natural coors of quadrilateral
-    natcoord = Array[[-1, 1, 1, -1] [-1, -1, 1, 1]]
+    natcoord = [[-1, 1, 1, -1] [-1, -1, 1, 1]]
 
     # Derivatives of shape functions wrt natural coords
     dNdnat = zeros((2, 4))
@@ -151,33 +150,76 @@ function strain_displacement(realcoors, ξ, η)
 
     # Elemental Jacobian matrix
     Jmat = dot(dNdnat,realcoors)
-    J = det(Jmat)
+    # J = det(Jmat)
 
     JmatInv = inv(Jmat)
     dNdx = dot(JmatInv,dNdnat)
 
-    # TODO Implement the following python code
-    # dsB=np.zeros((3,8))
-    # dsB[0,0::2]=dNdx[0,:]
-    # dsB[1,1::2]=dNdx[1,:]
-    # dsB[2,0::2]=dNdx[1,:]
-    # dsB[2,1::2]=dNdx[0,:]
+    dsB = zeros((3, 8))
+    dsB[1, 1:3] = dNdx[1,:]
+    dsB[2, 2:3] = dNdx[2,:]
+    dsB[3, 1:3] = dNdx[2,:]
+    dsB[3, 2:3] = dNdx[1,:]
 
-    # return dsB
+    return dsB
 end
+
+function jacobian(ξ, η)
+    J = [[1, 0] [0.125 - 0.125*η, 0.375 - ξ*0.125]]
+    invJ = inv(J)
+
+    return invJ
+end
+
+function stiffness_matrix(realcoors, Cϵ)
+    # Stiffness element
+    Ke = zeros((8,8))
+
+    # Location of Gauss points
+    a = 1/sqrt(3)
+
+    # Weights of functions
+    w = 1
+
+    # Matrix of Gauss points
+    gauss = Array[[-a, a, a, -a] [-a, -a, a, a]]
+
+    for i = 1:4
+        # Natural coors
+        ξ = gauss[1,i]
+        η = gauss[2,i]
+
+        # B matrix
+        dsB = strain_displacement(realcoors, ξ, η)
+
+        # Jacobian and determinant
+        J = jacobian(ξ, η)
+        detJ = det(J)
+
+        # Calculate K
+        dsBT = transpose(dsB)
+        dot1 = dot(dsBT, Cϵ)
+        dot2 = dot(dot1, dsB)
+        Ke = Ke + dot2 * detJ * w
+    end
+
+    return Ke
+end
+
 
 using Plots; gr()
 using LaTeXStrings
+using LinearAlgebra
 
-function main(points=20)
+function main(points::Int=1000)
+    ### Generate mesh grid ###
     if points < 10
-        println(points, " grid point(s) have be specified.")
-        println("This can not run with less than 10 grid points!")
+        println(points, " grid point have be specified.")
+        println("This can not run with less than 30 grid points!")
         println("It is also recommended to use at least 100 grid points.")
-        throw(DomainError(points, "points argument must be ≥ 10"))
+        throw(DomainError(points, "points argument must be ≥ 30"))
     elseif points < 100
         println("It is recommended to use at least 100 grid points.")
-        println(points, " points have been specified here.")
     end
 
     xstart = 0
@@ -188,9 +230,7 @@ function main(points=20)
     # Assign points to each solid element
     xpoints, ypoints = pointsdiff(points, xstart, eright, ystart, etop)
 
-    if points >= 100
-        println(Int(xpoints * ypoints), " grid points used.")
-    end
+    println(Int(xpoints * ypoints), " grid points used.")
 
     # Obtain mesh arrays for solid element sides
     bot, top, left, right = elements(Int(xpoints), Int(ypoints), xstart, ystart,
@@ -204,6 +244,7 @@ function main(points=20)
         seriestype = :scatter,
         aspect_ratio = :equal,
         xlim = (-0.2, 4.2),
+        ylim = (-0.2, 5.2),
         legend = :none,
         markersize = 1, markershape = :x, markercolor = :black,
         xlabel = L"$x_1$",
@@ -212,6 +253,34 @@ function main(points=20)
     )
 
     display(meshgrid)
+
+    ### Element deformation ###
+    # Material properties
+    E = 1e7
+    ν = 0.31
+
+    # Boundary condition
+    ndof = size(xyz, 1)
+    BC = ones(Int, (ndof, 2))
+
+    # Find first and last indices in xyz between 1.5 and 2.5 in x
+    # Alternative syntax to find value:
+    # lb = xyz[findfirst(1.5 .<= xyz .<= 2.5, xyz), 1]
+    y1 = findfirst(j -> j == 0, xyz[:,2])
+    y2 = findlast(j -> j == 0, xyz[:,2])
+    lb = findfirst(i -> (i >= 1.5) && (i <= 2.5), xyz[:,1])
+    ub = findlast(i -> (i >= 1.5) && (i <= 2.5), xyz[y1:y2, 1])
+
+    BC[lb:ub] .= 0
+    BCid = findall(!iszero, BC)
+
+    # # Applied load
+    fext = -100
+
+    rhs = zeros(Float64, ndof)
+    rhs[1:2] .= fext
+
 end
 
 main()
+# TODO remember to set limit back to 30
