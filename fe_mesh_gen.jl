@@ -184,7 +184,7 @@ function stiffness_matrix(realcoors, Cϵ)
     # Matrix of Gauss points
     gauss = Array[[-a, a, a, -a] [-a, -a, a, a]]
 
-    for i = 1:4
+    Threads.@threads for i = 1:4
         # Natural coors
         ξ = gauss[1,i]
         η = gauss[2,i]
@@ -254,6 +254,7 @@ function main(points::Int=1000)
 
     display(meshgrid)
 
+    # TODO Put this in a separate function and/or module
     ### Element deformation ###
     # Material properties
     E = 1e7
@@ -264,23 +265,33 @@ function main(points::Int=1000)
     BC = ones(Int, (ndof, 2))
 
     # Find first and last indices in xyz between 1.5 and 2.5 in x
-    # Alternative syntax to find value:
-    # lb = xyz[findfirst(1.5 .<= xyz .<= 2.5, xyz), 1]
-    y1 = findfirst(j -> j == 0, xyz[:,2])
+    y1 = findfirst(i -> i == 0, xyz[:,2])
     y2 = findlast(j -> j == 0, xyz[:,2])
-    lb = findfirst(i -> (i >= 1.5) && (i <= 2.5), xyz[:,1])
-    ub = findlast(i -> (i >= 1.5) && (i <= 2.5), xyz[y1:y2, 1])
+    lb = findfirst(k -> (k >= 1.5) && (k <= 2.5), xyz[:,1])
+    ub = findlast(l -> (l >= 1.5) && (l <= 2.5), xyz[y1:y2, 1])
 
+    # Set these elements = 0
     BC[lb:ub] .= 0
+    BC = reshape(transpose(BC), (length(BC), 1)) # TODO Is there a better way to do this?
     BCid = findall(!iszero, BC)
 
-    # # Applied load
+    # Applied load
     fext = -100
 
-    rhs = zeros(Float64, ndof)
-    rhs[1:2] .= fext
+    # Apply the loads in the x direction to the top of the solid
+    ytop = findall(i -> i == 5, xyz[:,2])
+    rhs = zeros((size(xyz, 1), 2))
+    Threads.@threads for j in ytop
+        rhs[j,1] = fext
+    end
+    rhs = reshape(transpose(rhs), (length(rhs), 1)) # TODO Is there a better way to do this?
+
+    newrhs = zeros(length(BCid))
+    Threads.@threads for i = 1:length(BCid)
+        newrhs[i] = rhs[BCid[i]]
+    end
 
 end
 
-main()
+main(10)
 # TODO remember to set limit back to 30
