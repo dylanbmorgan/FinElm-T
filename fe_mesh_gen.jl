@@ -135,31 +135,34 @@ function shapefuncs(ξ, η)
     return N
 end
 
-# New module elemental stiffness
+# New module Elemental
 
 using LinearAlgebra
+using NumPyArrays, PyCall; np = pyimport("numpy")
 
-function strain_displacement(realcoors, ξ, η)
+function straindisp(rc, ξ, η)
     # Natural coors of quadrilateral
-    natcoord = [[-1, 1, 1, -1] [-1, -1, 1, 1]]
+    # rc stands for real coors
+    corners = [[rc[1,1],rc[end,1],rc[1,1],rc[end,1]];;
+               [rc[1,2],rc[1,2],rc[end,2],rc[end,2]]]
+
+    natcoors = [[-1, 1, 1, -1] [-1, -1, 1, 1]]
 
     # Derivatives of shape functions wrt natural coords
     dNdnat = zeros((2, 4))
-    dNdnat[1,:]= 0.25 * natcoord[1,:] * (1+natcoord[2,:] * η)
-    dNdnat[2,:]= 0.25 * natcoord[2,:] * (1+natcoord[1,:] * ξ)
+    dNdnat[1,:] = 0.25 .* natcoors[:,1] .* (1 .+ natcoors[:,2] .* η)
+    dNdnat[2,:] = 0.25 .* natcoors[:,2] .* (1 .+ natcoors[:,1] .* ξ)
 
     # Elemental Jacobian matrix
-    Jmat = dot(dNdnat,realcoors)
-    # J = det(Jmat)
-
+    Jmat = dNdnat * corners
     JmatInv = inv(Jmat)
-    dNdx = dot(JmatInv,dNdnat)
+    dNdx = sum(JmatInv, dims=2) .* dNdnat
 
     dsB = zeros((3, 8))
-    dsB[1, 1:3] = dNdx[1,:]
-    dsB[2, 2:3] = dNdx[2,:]
-    dsB[3, 1:3] = dNdx[2,:]
-    dsB[3, 2:3] = dNdx[1,:]
+    dsB[1, 1:2:8] = dNdx[1,:]
+    dsB[2, 2:2:8] = dNdx[2,:]
+    dsB[3, 1:2:8] = dNdx[2,:]
+    dsB[3, 2:2:8] = dNdx[1,:]
 
     return dsB
 end
@@ -171,7 +174,7 @@ function jacobian(ξ, η)
     return invJ
 end
 
-function stiffness_matrix(realcoors, Cϵ)
+function stiffmatrix(realcoors, Ce)
     # Stiffness element
     Ke = zeros((8,8))
 
@@ -182,15 +185,15 @@ function stiffness_matrix(realcoors, Cϵ)
     w = 1
 
     # Matrix of Gauss points
-    gauss = Array[[-a, a, a, -a] [-a, -a, a, a]]
+    gauss = [[-a, a, a, -a] [-a, -a, a, a]]
 
-    Threads.@threads for i = 1:4
+    for i = 1:4
         # Natural coors
-        ξ = gauss[1,i]
-        η = gauss[2,i]
+        ξ = gauss[i,1]
+        η = gauss[i,2]
 
         # B matrix
-        dsB = strain_displacement(realcoors, ξ, η)
+        dsB = straindisp(realcoors, ξ, η)
 
         # Jacobian and determinant
         J = jacobian(ξ, η)
@@ -198,12 +201,119 @@ function stiffness_matrix(realcoors, Cϵ)
 
         # Calculate K
         dsBT = transpose(dsB)
-        dot1 = dot(dsBT, Cϵ)
-        dot2 = dot(dot1, dsB)
+        sumdsBT = sum(dsBT, dims=2)
+        dot1 = zeros((size(dsBT, 1), size(dsBT, 2)))
+
+        # TODO find a better way to do this
+        # Inner product of dsBT and Ce
+        Threads.@threads for j = 1:3:size(dot1, 1)
+            dot1[j,1:3] = sumdsBT[j] .* Ce[1,:]
+            dot1[j+1,1:3] = sumdsBT[j] .* Ce[2,:]
+
+            if j != 7
+                dot1[j+2,1:3] = sumdsBT[j] .* Ce[3,:]
+            end
+        end
+
+        #=
+        dot2 = zeros((size(dsBT, 1), size(dsB, 2)))
+        isumdot1 = sum(dot1, dims=2)
+
+        for j = 1:size(dot2, 1)
+
+            for k = 1:3:size(dsB, 2)
+                for l in dsB[k]
+                    dot2[j,k] = l * isumdot1
+                end
+
+                for m in dsB[k+1]
+                    dot2[j,k+1] = m * isumdot1
+                end
+
+                for n in dsB[k+2]
+                    dot2[j,k+2] = n * isumdot1
+                end
+
+                dot2[j,1:8] = isumdot1[k] .* dsB[k]
+                dot2[j+1,1:8] = isumdot1[k] .* dsB[k+1]
+
+                if k != 7
+                    dot2[j+2,1:8] = isumdot1[k] .* dsB[k+2]
+                end
+            end
+        end
+        =#
+
+        npdot1 = PyObject(NumPyArray(dot1))
+        npdsB = PyObject(NumPyArray(dsB))
+        dot2 = np.dot(npdot1, npdsB)
+
         Ke = Ke + dot2 * detJ * w
     end
 
     return Ke
+end
+
+function deformation(E, ν, fext, coors, C, Ke)
+    # Boundary condition
+    ndof = size(coors, 1)
+    BC = ones(Int, (ndof, 2))
+
+    # Find first and last indices in xyz between 1.5 and 2.5 in x
+    y1 = findfirst(i -> i == 0, coors[:,2])
+    y2 = findlast(j -> j == 0, coors[:,2])
+    lb = findfirst(k -> (k >= 1.5) && (k <= 2.5), coors[:,1])
+    ub = findlast(l -> (l >= 1.5) && (l <= 2.5), coors[y1:y2, 1])
+
+    # Set these elements = 0
+    BC[lb:ub] .= 0
+    BC = reshape(transpose(BC), (length(BC), 1)) # TODO Is there a better way to do this?
+    BCid = findall(!iszero, BC)
+
+    # Apply the loads in the x direction to the top of the solid
+    ytop = findall(i -> i == 5, coors[:,2])
+    rhs = zeros((size(coors, 1), 2))
+    Threads.@threads for j in ytop
+        rhs[j,1] = fext
+    end
+    rhs1 = reshape(transpose(rhs), (length(rhs), 1)) # TODO Is there a better way to do this?
+
+    # Non zero elements
+    rhs2 = zeros(length(BCid))
+    Threads.@threads for i = 1:length(BCid)
+        rhs2[i] = rhs1[BCid[i]]
+    end
+
+    # TODO Find a better way of doing this
+    iBCid = zeros(Int, length(BCid))
+    for i = 1:length(BCid)
+        iBCid[i] = i
+    end
+    npBCid = NumPyArray(iBCid)
+    npKe = NumPyArray(Ke)
+    display(npBCid)
+    display(npKe)
+    # TODO HELP!!!
+    npKe = npKe[np.ix_(npBCid,npBCid)]
+
+    ue = gesvx!(npKe, BCid)
+
+    de = zeros(2 * length(coors))
+    # de[BCid] = ue
+end
+
+function stress(realcoors, Ce, de)
+    # Location of Gauss points
+    a = 1/sqrt(3)
+
+    # Weights of functions
+    w = 1
+
+    # Matrix of Gauss points
+    gauss = [[-a, a, a, -a] [-a, -a, a, a]]
+
+    # TODO
+
 end
 
 
@@ -213,7 +323,7 @@ using LinearAlgebra
 
 function main(points::Int=1000)
     ### Generate mesh grid ###
-    if points < 10
+    if points < 5
         println(points, " grid point have be specified.")
         println("This can not run with less than 30 grid points!")
         println("It is also recommended to use at least 100 grid points.")
@@ -254,44 +364,27 @@ function main(points::Int=1000)
 
     display(meshgrid)
 
-    # TODO Put this in a separate function and/or module
-    ### Element deformation ###
+    ### Deformation ###
     # Material properties
     E = 1e7
-    ν = 0.31
-
-    # Boundary condition
-    ndof = size(xyz, 1)
-    BC = ones(Int, (ndof, 2))
-
-    # Find first and last indices in xyz between 1.5 and 2.5 in x
-    y1 = findfirst(i -> i == 0, xyz[:,2])
-    y2 = findlast(j -> j == 0, xyz[:,2])
-    lb = findfirst(k -> (k >= 1.5) && (k <= 2.5), xyz[:,1])
-    ub = findlast(l -> (l >= 1.5) && (l <= 2.5), xyz[y1:y2, 1])
-
-    # Set these elements = 0
-    BC[lb:ub] .= 0
-    BC = reshape(transpose(BC), (length(BC), 1)) # TODO Is there a better way to do this?
-    BCid = findall(!iszero, BC)
+    ν = 0.34
 
     # Applied load
     fext = -100
 
-    # Apply the loads in the x direction to the top of the solid
-    ytop = findall(i -> i == 5, xyz[:,2])
-    rhs = zeros((size(xyz, 1), 2))
-    Threads.@threads for j in ytop
-        rhs[j,1] = fext
-    end
-    rhs = reshape(transpose(rhs), (length(rhs), 1)) # TODO Is there a better way to do this?
+    Ce = planestress(E, ν)
+    Ke = stiffmatrix(xyz, Ce)
+    # TODO not working yet
+    # def = deformation(E, ν, fext, xyz, Ce, Ke)
 
-    newrhs = zeros(length(BCid))
-    Threads.@threads for i = 1:length(BCid)
-        newrhs[i] = rhs[BCid[i]]
-    end
+    eps11 = 0
+    eps22 = 0
+    gamma12 = 0
+
+    # TODO not finished yet
+    σ = stress(xyz, Ce, de)
 
 end
 
-main(10)
+main()
 # TODO remember to set limit back to 30
