@@ -110,9 +110,10 @@ end
 
 # New module shapefunctions
 
-function planestress(E, ν)
-    constant = E / (1 - (ν*ν))
-    mat = [[1, ν, 0] [ν, 1, 0] [0, 0, 0.5*(1 - ν)]]
+# TODO change to plane strain
+function planestrain(E, ν)
+    constant = E / ((1 + ν) * (1 - (2*ν)))
+    mat = [[1 - ν, ν, 0] [ν, 1 - ν, 0] [0, 0, 0.5*(1 - (2 * ν))]]
     C = constant * mat
 
     return C
@@ -138,7 +139,6 @@ end
 # New module Elemental
 
 using LinearAlgebra
-using NumPyArrays, PyCall; np = pyimport("numpy")
 
 function straindisp(rc, ξ, η)
     # Natural coors of quadrilateral
@@ -200,58 +200,18 @@ function stiffmatrix(realcoors, Ce)
         detJ = det(J)
 
         # Calculate K
-        dsBT = transpose(dsB)
+        dsBT = dsB'
         sumdsBT = sum(dsBT, dims=2)
-        dot1 = zeros((size(dsBT, 1), size(dsBT, 2)))
-
-        # TODO find a better way to do this
-        # Inner product of dsBT and Ce
-        Threads.@threads for j = 1:3:size(dot1, 1)
-            dot1[j,1:3] = sumdsBT[j] .* Ce[1,:]
-            dot1[j+1,1:3] = sumdsBT[j] .* Ce[2,:]
-
-            if j != 7
-                dot1[j+2,1:3] = sumdsBT[j] .* Ce[3,:]
-            end
-        end
-
-        #=
-        dot2 = zeros((size(dsBT, 1), size(dsB, 2)))
-        isumdot1 = sum(dot1, dims=2)
-
-        for j = 1:size(dot2, 1)
-
-            for k = 1:3:size(dsB, 2)
-                for l in dsB[k]
-                    dot2[j,k] = l * isumdot1
-                end
-
-                for m in dsB[k+1]
-                    dot2[j,k+1] = m * isumdot1
-                end
-
-                for n in dsB[k+2]
-                    dot2[j,k+2] = n * isumdot1
-                end
-
-                dot2[j,1:8] = isumdot1[k] .* dsB[k]
-                dot2[j+1,1:8] = isumdot1[k] .* dsB[k+1]
-
-                if k != 7
-                    dot2[j+2,1:8] = isumdot1[k] .* dsB[k+2]
-                end
-            end
-        end
-        =#
-
-        npdot1 = PyObject(NumPyArray(dot1))
-        npdsB = PyObject(NumPyArray(dsB))
-        dot2 = np.dot(npdot1, npdsB)
-
+        dot1 = dsBT * Ce
+        dot2 = dot1 * dsB
         Ke = Ke + dot2 * detJ * w
     end
 
     return Ke
+end
+
+function globstiff()
+    # TODO 2, 3
 end
 
 function deformation(E, ν, fext, coors, C, Ke)
@@ -267,7 +227,7 @@ function deformation(E, ν, fext, coors, C, Ke)
 
     # Set these elements = 0
     BC[lb:ub] .= 0
-    BC = reshape(transpose(BC), (length(BC), 1)) # TODO Is there a better way to do this?
+    BC = reshape(BC', (length(BC), 1)) # TODO Is there a better way to do this?
     BCid = findall(!iszero, BC)
 
     # Apply the loads in the x direction to the top of the solid
@@ -276,7 +236,7 @@ function deformation(E, ν, fext, coors, C, Ke)
     Threads.@threads for j in ytop
         rhs[j,1] = fext
     end
-    rhs1 = reshape(transpose(rhs), (length(rhs), 1)) # TODO Is there a better way to do this?
+    rhs1 = reshape(rhs', (length(rhs), 1)) # TODO Is there a better way to do this?
 
     # Non zero elements
     rhs2 = zeros(length(BCid))
@@ -312,7 +272,16 @@ function stress(realcoors, Ce, de)
     # Matrix of Gauss points
     gauss = [[-a, a, a, -a] [-a, -a, a, a]]
 
-    # TODO
+    σ = zeros(3)
+
+    vol = 0
+
+    for i in 1:4
+        ξ = gauss[0,1]
+
+        # TODO
+
+    end
 
 end
 
@@ -372,10 +341,10 @@ function main(points::Int=1000)
     # Applied load
     fext = -100
 
-    Ce = planestress(E, ν)
+    Ce = planestrain(E, ν)
     Ke = stiffmatrix(xyz, Ce)
     # TODO not working yet
-    # def = deformation(E, ν, fext, xyz, Ce, Ke)
+    def = deformation(E, ν, fext, xyz, Ce, Ke)
 
     eps11 = 0
     eps22 = 0
