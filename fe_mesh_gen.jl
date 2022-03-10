@@ -65,7 +65,8 @@ function mesh(bot, top, left, right)
     # Number of nodes and elements in the domain 
     nnodesx = size(bot, 1)
     nnodesy = size(left, 1)
-    nelly = (nnodesx - 1, nnodesy - 1)
+    nelx = nnodesx - 1
+    nely = nnodesy - 1
     nnodes = nnodesx * nnodesy
 
     # Dimensions of the domain 
@@ -90,37 +91,43 @@ function mesh(bot, top, left, right)
         end
     end
 
-    # Nodes for elements
-    nelx = nelly[1]
-    nely = nelly[2]
-    nnodesx = nelx + 1
+    # Elements in the solid
     nel = nelx * nely
-    con = zeros(Int, (nel, 4))
+    elem = fill(Vector[], nel)
+
     Threads.@threads for i in 1:nely
         for j in 1:nelx
-            con[j + (i-1)*nelx, :] = [j + (i-1)*nnodesx, j + (i-1)*nnodesx + 1,
-                                      j + i*nnodesx + 1, j + i*nnodesx]
+            elem[j + (i-1)*nelx] = [xyz[j + (i-1)*nnodesx],
+                                    xyz[j + (i-1)*nnodesx + 1],
+                                    xyz[j + i*nnodesx + 1],
+                                    xyz[j + i*nnodesx]]
         end
     end
 
-    # Relate elements to grid coors
-    elem = fill(Vector{Float64}[], size(con, 1))
-    for i = 1:size(con, 1)
-        elem[i] = [xyz[con[i,1]], xyz[con[i,2]],
-                      xyz[con[i,3]], xyz[con[i,4]]]
+    return xyz, elem
+end
+
+function condof(elements, xyz)
+    # Obtain connective indices between nodes to form elements
+    con = fill(Vector[], length(elements))
+
+    for (i, element) in enumerate(elements)
+        con[i] = [findall(pos -> pos in element, xyz)]
     end
 
-
-
+    # TODO
     # Global DOF for each element (4-node (linear) quadrilateral element)
-    dof = zeros(Int, nel, 2 * 4)
-    Threads.@threads for i in 1:nel
-        dof[i, :] = [con[i, 1]*2, con[i, 2] * 2 - 1, con[i, 2]*2, con[i, 2] * 
-                     2 + 1, con[i, 3]*2, con[i, 3] * 2 + 1, con[i, 4]*2, 
+    # dof = zeros(Int, size(con, 1), 2 * 4)
+    dof = fill(Vector[], size(con, 1))
+    for i in 1:size(con, 1)
+        dof[i] = [con[i, 1]*2, con[i, 2] * 2 - 1, con[i, 2]*2, con[i, 2] *
+                     2 + 1, con[i, 3]*2, con[i, 3] * 2 + 1, con[i, 4]*2,
                      con[i, 4] * 2 + 1]
+
+        println(con[i])
     end
 
-    return xyz, con, elem, dof
+    return con, dof
 end
 
 # New module shapefunctions
@@ -328,7 +335,7 @@ function main(points::Int=100)
 
     # Assign points to each solid part
     xpoints1 = pointsdiff(points, xstart1, eright1, ystart1, etop1)
-    ypoints1 = (4 * xpoints1)
+    ypoints1 = (4 * (xpoints1 - 1))
     ypoints2 = xpoints1
     xpoints2 = (4 * xpoints1) - 3
 
@@ -342,8 +349,8 @@ function main(points::Int=100)
                                      etop2, eright2)
 
     # Return grid of nodes for each solid part
-    xyz1, con1, elem1, dof1 = mesh(bot1, top1, left1, right1)
-    xyz2, con2, elem2, dof2 = mesh(bot2, top2, left2, right2)
+    xyz1, elem1 = mesh(bot1, top1, left1, right1)
+    xyz2, elem2 = mesh(bot2, top2, left2, right2)
 
     # Solid nodes concatenated with duplicates removed
     xyz = union(xyz1, xyz2)
@@ -354,6 +361,10 @@ function main(points::Int=100)
 
     # Combine elements from 2 solid shapes
     elem = vcat(elem1, elem2)
+
+    con, dof = condof(elem, xyz)
+
+    display(con)
 
     ### Plotting ###
     meshgrid = plot(
@@ -394,5 +405,5 @@ function main(points::Int=100)
 
 end
 
-main(10)
+main(7)
 # TODO remember to set limit back to 30
