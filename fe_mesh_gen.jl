@@ -12,20 +12,24 @@ function pointsdiff(totpoints, xstart, eright, ystart, etop)
     xdir = abs(eright - xstart)
     ydir = abs(etop - ystart)
     factor1 = xdir / ydir
-    factor2 = ydir / xdir
+    factor2 = ydir - 1 / xdir
 
     # Work out number of grid points in x and y directions
     if factor1 > 1
         factor = factor1
-        ypoints = round(sqrt(totpoints / factor))
+        # ypoints = round(sqrt(totpoints / factor))
         xpoints = round(factor * ypoints)
     else
         factor = factor2
         xpoints = round(sqrt(totpoints / factor))
-        ypoints = round(factor * xpoints)
+        # ypoints = round(factor * xpoints)
     end
 
-    return xpoints, ypoints
+    if iseven(xpoints)
+        xpoints += 1
+    end
+
+    return xpoints
 end
 
 """
@@ -33,7 +37,7 @@ end
 
 Create arrays of meshpoints for each side of the shape
 """
-function elements(xpoints, ypoints, xstart, ystart, etop, eright)
+function mesharrays(xpoints, ypoints, xstart, ystart, etop, eright)
     # Generate points in x-direction
     bot = zeros(xpoints)
     for (i,num) in enumerate(LinRange(xstart, eright, xpoints))
@@ -61,41 +65,52 @@ function mesh(bot, top, left, right)
     # Number of nodes and elements in the domain 
     nnodesx = size(bot, 1)
     nnodesy = size(left, 1)
-    nelx = nnodesx - 1
-    nely = nnodesy - 1
+    nelly = (nnodesx - 1, nnodesy - 1)
     nnodes = nnodesx * nnodesy
 
     # Dimensions of the domain 
     lx = bot[nnodesx] - bot[1]
     ly = left[nnodesy] - left[1]
 
-    # Generate coords of nodes 'xyz'
-    xyz = zeros(nnodes, 2)
+    # Generate coords of nodes 'xyz' with array of arrays
+    xyz = fill(Float64[], nnodes)
+
     Threads.@threads for i in 1:nnodesy
         yl = left[i] - left[1]
         dy = right[i] - left[i]
 
         for j in 1:nnodesx
-            xb = bot[j] - bot[1] 
+            xb = bot[j] - bot[1]
             dx = top[j] - bot[j]
 
             xcoor = (dx*yl + xb*ly) / (ly - dx*dy / lx)
             ycoor = dy / lx*xcoor + yl
 
-            xyz[j + (i-1)*nnodesx, 1] = xcoor + bot[1]
-            xyz[j + (i-1)*nnodesx, 2] = ycoor + left[1]
+            xyz[j + (i-1)*nnodesx] = Float64[xcoor + bot[1], ycoor + left[1]]
         end
     end
 
-    # Node nums for elements
+    # Nodes for elements
+    nelx = nelly[1]
+    nely = nelly[2]
+    nnodesx = nelx + 1
     nel = nelx * nely
-    con = zeros(nel, 4)
+    con = zeros(Int, (nel, 4))
     Threads.@threads for i in 1:nely
         for j in 1:nelx
-            con[j + (i-1)*nelx, :] = [(j-1) + (i-1)*nnodesx, j + (i-1)*nnodesx,
-                                      (j-1) + i*nnodesx + 1, (j-1) + i*nnodesx]
+            con[j + (i-1)*nelx, :] = [j + (i-1)*nnodesx, j + (i-1)*nnodesx + 1,
+                                      j + i*nnodesx + 1, j + i*nnodesx]
         end
     end
+
+    # Relate elements to grid coors
+    elem = fill(Vector{Float64}[], size(con, 1))
+    for i = 1:size(con, 1)
+        elem[i] = [xyz[con[i,1]], xyz[con[i,2]],
+                      xyz[con[i,3]], xyz[con[i,4]]]
+    end
+
+
 
     # Global DOF for each element (4-node (linear) quadrilateral element)
     dof = zeros(Int, nel, 2 * 4)
@@ -105,12 +120,11 @@ function mesh(bot, top, left, right)
                      con[i, 4] * 2 + 1]
     end
 
-    return xyz, con, dof
+    return xyz, con, elem, dof
 end
 
 # New module shapefunctions
 
-# TODO change to plane strain
 function planestrain(E, ν)
     constant = E / ((1 + ν) * (1 - (2*ν)))
     mat = [[1 - ν, ν, 0] [ν, 1 - ν, 0] [0, 0, 0.5*(1 - (2 * ν))]]
@@ -251,8 +265,8 @@ function deformation(E, ν, fext, coors, C, Ke)
     end
     npBCid = NumPyArray(iBCid)
     npKe = NumPyArray(Ke)
-    display(npBCid)
-    display(npKe)
+    # display(npBCid)
+    # display(npKe)
     # TODO HELP!!!
     npKe = npKe[np.ix_(npBCid,npBCid)]
 
@@ -290,7 +304,7 @@ using Plots; gr()
 using LaTeXStrings
 using LinearAlgebra
 
-function main(points::Int=1000)
+function main(points::Int=100)
     ### Generate mesh grid ###
     if points < 5
         println(points, " grid point have be specified.")
@@ -301,27 +315,49 @@ function main(points::Int=1000)
         println("It is recommended to use at least 100 grid points.")
     end
 
-    xstart = 0
-    ystart = 0
-    etop = 5
-    eright = 4
+    # Corners of both parts of solid
+    xstart1 = 1.5
+    ystart1 = 0
+    etop1 = 4
+    eright1 = 2.5
 
-    # Assign points to each solid element
-    xpoints, ypoints = pointsdiff(points, xstart, eright, ystart, etop)
+    xstart2 = 0
+    ystart2 = 4
+    etop2 = 5
+    eright2 = 4
 
-    println(Int(xpoints * ypoints), " grid points used.")
+    # Assign points to each solid part
+    xpoints1 = pointsdiff(points, xstart1, eright1, ystart1, etop1)
+    ypoints1 = (4 * xpoints1)
+    ypoints2 = xpoints1
+    xpoints2 = (4 * xpoints1) - 3
 
-    # Obtain mesh arrays for solid element sides
-    bot, top, left, right = elements(Int(xpoints), Int(ypoints), xstart, ystart,
-                                     etop, eright)
+    println(Int(xpoints1 * ypoints1) + Int(xpoints2 + ypoints2),
+            " grid points used.")
 
-    xyz, con, dof = mesh(bot, top, left, right)
+    # Obtain mesh arrays for solid part edges
+    bot1, top1, left1, right1 = mesharrays(Int(xpoints1), Int(ypoints1), xstart1, ystart1,
+                                     etop1, eright1)
+    bot2, top2, left2, right2 = mesharrays(Int(xpoints2), Int(ypoints2), xstart2, ystart2,
+                                     etop2, eright2)
 
-    display(xyz)
+    # Return grid of nodes for each solid part
+    xyz1, con1, elem1, dof1 = mesh(bot1, top1, left1, right1)
+    xyz2, con2, elem2, dof2 = mesh(bot2, top2, left2, right2)
+
+    # Solid nodes concatenated with duplicates removed
+    xyz = union(xyz1, xyz2)
+
+    # Axes for plotting nodes
+    X = [i[1] for i in xyz]
+    Y = [j[2] for j in xyz]
+
+    # Combine elements from 2 solid shapes
+    elem = vcat(elem1, elem2)
 
     ### Plotting ###
     meshgrid = plot(
-        xyz[:,1], xyz[:,2],
+        X, Y,
         seriestype = :scatter,
         aspect_ratio = :equal,
         xlim = (-0.2, 4.2),
@@ -358,5 +394,5 @@ function main(points::Int=1000)
 
 end
 
-main()
+main(10)
 # TODO remember to set limit back to 30
