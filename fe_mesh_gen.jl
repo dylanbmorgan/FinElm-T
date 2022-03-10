@@ -317,6 +317,8 @@ function main(points::Int=1000)
 
     xyz, con, dof = mesh(bot, top, left, right)
 
+    display(xyz)
+
     ### Plotting ###
     meshgrid = plot(
         xyz[:,1], xyz[:,2],
@@ -342,6 +344,7 @@ function main(points::Int=1000)
     fext = -100
 
     Ce = planestrain(E, ν)
+    # TODO change xyz for con in below
     Ke = stiffmatrix(xyz, Ce)
     # TODO not working yet
     def = deformation(E, ν, fext, xyz, Ce, Ke)
