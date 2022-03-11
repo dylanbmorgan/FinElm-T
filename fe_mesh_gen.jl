@@ -161,8 +161,8 @@ function straindisp(rc, ξ, η)
     # Natural coors of quadrilateral
     # rc stands for real coors
     corners = zeros(4,2)
-    for i = 1:4
-        for j = 1:2
+    for j = 1:2
+        for i = 1:4
             corners[i,j] = rc[i][j]
         end
     end
@@ -410,18 +410,32 @@ function main(points::Int=1000)
     println("Done")
 
     # Calculate the global stiffness matrix
-    dofmax = maximum(dof[end])
-    globstiff = zeros(dofmax, dofmax, length(elem))
+    # Workaround for Julia's 1-array indexing
 
-    # for i in Ke
-    #     for i = 1:dofmax
-    #         for j = 1:dofmax
-    #             globstiff[i,j] = i + j
-    #         end
-    #     end
-    # end
+    print("Assembling global stiffness matrix")
 
+    Threads.@threads for i = 1:length(dof)
+        dof[i] = dof[i] .- 1
+    end
+
+    globstiff = zeros(2*length(xyz), 2*length(xyz), length(elem))
+
+    display(Ke[:,:,1])
     display(dof)
+
+    Threads.@threads for i = 1:8
+        for j = 1:8
+            for m = 1:size(Ke, 3)
+                globstiff[dof[m][j],dof[m][i],m] = Ke[j,i,m]
+            end
+        end
+    end
+
+    globstiff = sum(globstiff, dims=3)
+
+    println("Done")
+
+    display(globstiff)
 
     # # TODO not working yet
     # def = deformation(E, ν, fext, xyz, Ce, Ke)
@@ -435,5 +449,5 @@ function main(points::Int=1000)
 
 end
 
-main(10)
+main()
 # TODO remember to set limit back to 30
