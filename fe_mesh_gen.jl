@@ -223,10 +223,6 @@ function stiffmatrix(realcoors, Ce)
     return Ke
 end
 
-function globstiff()
-    # TODO 2, 3
-end
-
 function deformation(E, ν, fext, coors, C, Ke)
     # Boundary condition
     ndof = size(coors, 1)
@@ -304,9 +300,9 @@ using LaTeXStrings
 
 function main(points::Int=1000)
     ### Generate mesh grid ###
-    if points < 5
+    if points < 10
         println(points, " grid point have be specified.")
-        println("This can not run with less than 30 grid points!")
+        println("This can not run with less than 10 grid points!")
         println("It is also recommended to use at least 100 grid points.")
         throw(DomainError(points, "points argument must be ≥ 30"))
     elseif points < 100
@@ -333,20 +329,22 @@ function main(points::Int=1000)
     println(Int(xpoints1 * ypoints1) + Int(xpoints2 + ypoints2),
             " grid points used."); println()
 
+    print("Calculating meshpoint arrays...")
+
     # Obtain mesh arrays for solid part edges
     bot1, top1, left1, right1 = mesharrays(Int(xpoints1), Int(ypoints1), xstart1, ystart1,
                                      etop1, eright1)
     bot2, top2, left2, right2 = mesharrays(Int(xpoints2), Int(ypoints2), xstart2, ystart2,
                                      etop2, eright2)
 
-    println("Finished calculating meshpoint arrays")
+    println("Done")
+    print("Calculating meshgrid coordinates and solid elements...")
 
     # Return grid of nodes for each solid part
     xyz1, elem1 = mesh(bot1, top1, left1, right1)
     xyz2, elem2 = mesh(bot2, top2, left2, right2)
 
-    println("Finished calculating meshgrid coordinates")
-    println("Finished calculating elements in each part of the solid")
+    println("Done")
 
     # Solid nodes concatenated with duplicates removed
     xyz = union(xyz1, xyz2)
@@ -358,13 +356,12 @@ function main(points::Int=1000)
     # Combine elements from 2 solid shapes
     elem = vcat(elem1, elem2)
 
-    println("Finished combining solid elements")
+    print("Calculating connecting grid and elemental degrees of freedom...")
 
     con, dof = condof(elem, xyz)
 
-    println("Finished calculating the connecting grid")
-    println("Finished calculating the degrees of freedom for each element")
-    println("Plotting meshgrid...")
+    println("Done")
+    print("Plotting meshgrid...")
 
     ### Plotting ###
     meshgrid = plot(
@@ -374,13 +371,15 @@ function main(points::Int=1000)
         xlim = (-0.2, 4.2),
         ylim = (-0.2, 5.2),
         legend = :none,
-        markersize = 1, markershape = :x, markercolor = :black,
+        markersize = 1, markershape = :circle, markercolor = :black,
         xlabel = L"$x_1$",
         ylabel = L"$x_2$",
         title = "Meshgrid"
     )
 
     display(meshgrid)
+
+    println("Done")
 
     ### Deformation ###
     # Material properties
@@ -390,16 +389,39 @@ function main(points::Int=1000)
     # Applied load
     fext = -100
 
+    print("Calculating plane strain...")
+
     Ce = planestrain(E, ν)
 
-    println("Finished calculating plane strain")
+    println("Done")
+    print("Calculating the per element stiffness matrix...")
 
-    Ke = fill(Matrix[], length(elem))
+    # Calculate the stiffness matrices per elements
+    # Ke = fill(Matrix[], length(elem))
+    # Threads.@threads for i = 1:length(elem)
+    #     Ke[i] = [stiffmatrix(elem[i], Ce)]
+    # end
+
+    Ke = zeros(8, 8, length(elem))
     Threads.@threads for i = 1:length(elem)
-        Ke[i] = [stiffmatrix(elem[i], Ce)]
+        Ke[:,:,i] = (stiffmatrix(elem[i], Ce))
     end
 
-    println("Finished calculating the per element stiffness matrix")
+    println("Done")
+
+    # Calculate the global stiffness matrix
+    dofmax = maximum(dof[end])
+    globstiff = zeros(dofmax, dofmax, length(elem))
+
+    # for i in Ke
+    #     for i = 1:dofmax
+    #         for j = 1:dofmax
+    #             globstiff[i,j] = i + j
+    #         end
+    #     end
+    # end
+
+    display(dof)
 
     # # TODO not working yet
     # def = deformation(E, ν, fext, xyz, Ce, Ke)
@@ -413,5 +435,5 @@ function main(points::Int=1000)
 
 end
 
-main()
+main(10)
 # TODO remember to set limit back to 30
