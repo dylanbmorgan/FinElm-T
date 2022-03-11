@@ -40,13 +40,13 @@ Create arrays of meshpoints for each side of the shape
 function mesharrays(xpoints, ypoints, xstart, ystart, etop, eright)
     # Generate points in x-direction
     bot = zeros(xpoints)
-    for (i,num) in enumerate(LinRange(xstart, eright, xpoints))
+    Threads.@threads for (i,num) in collect(enumerate(LinRange(xstart, eright, xpoints)))
         bot[i] = num
     end
 
     # Generate points in y-direction
     left = zeros(ypoints)
-    for (j,num) in enumerate(LinRange(ystart, etop, ypoints))
+    Threads.@threads for (j,num) in collect(enumerate(LinRange(ystart, etop, ypoints)))
         left[j] = num
     end
 
@@ -111,14 +111,14 @@ function condof(elements, xyz)
     # Obtain connective indices between nodes to form elements
     con = fill(Int[], length(elements))
 
-    for (i, element) in enumerate(elements)
+    Threads.@threads for (i, element) in collect(enumerate(elements))
         con[i] = [j for j in findall(pos -> pos in element, xyz)]
     end
 
     # Global DOF for each element (4-node (linear) quadrilateral element)
     dof = fill(Int[], size(con, 1))
 
-    for (i, elem) in enumerate(con)
+    Threads.@threads for (i, elem) in collect(enumerate(con))
         dof[i] = [elem[1] * 2, elem[2] * 2 - 1, elem[2] * 2, elem[2] * 2 + 1,
                   elem[3] * 2, elem[3] * 2 + 1, elem[4] * 2, elem[4] * 2 + 1]
     end
@@ -160,8 +160,12 @@ using LinearAlgebra
 function straindisp(rc, ξ, η)
     # Natural coors of quadrilateral
     # rc stands for real coors
-    corners = [[rc[1][1],rc[end][1],rc[1][1],rc[end][1]];;
-               [rc[1][2],rc[1][2],rc[end][2],rc[end][2]]]
+    corners = zeros(4,2)
+    for i = 1:4
+        for j = 1:2
+            corners[i,j] = rc[i][j]
+        end
+    end
 
     natcoors = [[-1, 1, 1, -1] [-1, -1, 1, 1]]
 
@@ -172,10 +176,7 @@ function straindisp(rc, ξ, η)
 
     # Elemental Jacobian matrix
     Jmat = dNdnat * corners
-    display(Jmat)
     JmatInv = inv(Jmat)
-    display(JmatInv)
-    println()
     dNdx = sum(JmatInv, dims=2) .* dNdnat
 
     dsB = zeros((3, 8))
@@ -184,7 +185,7 @@ function straindisp(rc, ξ, η)
     dsB[3, 1:2:8] = dNdx[2,:]
     dsB[3, 2:2:8] = dNdx[1,:]
 
-    return dsB
+    return dsB, Jmat
 end
 
 function stiffmatrix(realcoors, Ce)
@@ -206,10 +207,9 @@ function stiffmatrix(realcoors, Ce)
         η = gauss[i,2]
 
         # B matrix
-        dsB = straindisp(realcoors, ξ, η)
+        dsB, J = straindisp(realcoors, ξ, η)
 
-        # Jacobian and determinant
-        J = jacobian(ξ, η)
+        # Jacobian determinant
         detJ = det(J)
 
         # Calculate K
@@ -302,7 +302,7 @@ end
 using Plots; gr()
 using LaTeXStrings
 
-function main(points::Int=100)
+function main(points::Int=1000)
     ### Generate mesh grid ###
     if points < 5
         println(points, " grid point have be specified.")
@@ -331,7 +331,7 @@ function main(points::Int=100)
     xpoints2 = (4 * xpoints1) - 3
 
     println(Int(xpoints1 * ypoints1) + Int(xpoints2 + ypoints2),
-            " grid points used.")
+            " grid points used."); println()
 
     # Obtain mesh arrays for solid part edges
     bot1, top1, left1, right1 = mesharrays(Int(xpoints1), Int(ypoints1), xstart1, ystart1,
@@ -339,9 +339,14 @@ function main(points::Int=100)
     bot2, top2, left2, right2 = mesharrays(Int(xpoints2), Int(ypoints2), xstart2, ystart2,
                                      etop2, eright2)
 
+    println("Finished calculating meshpoint arrays")
+
     # Return grid of nodes for each solid part
     xyz1, elem1 = mesh(bot1, top1, left1, right1)
     xyz2, elem2 = mesh(bot2, top2, left2, right2)
+
+    println("Finished calculating meshgrid coordinates")
+    println("Finished calculating elements in each part of the solid")
 
     # Solid nodes concatenated with duplicates removed
     xyz = union(xyz1, xyz2)
@@ -353,7 +358,13 @@ function main(points::Int=100)
     # Combine elements from 2 solid shapes
     elem = vcat(elem1, elem2)
 
+    println("Finished combining solid elements")
+
     con, dof = condof(elem, xyz)
+
+    println("Finished calculating the connecting grid")
+    println("Finished calculating the degrees of freedom for each element")
+    println("Plotting meshgrid...")
 
     ### Plotting ###
     meshgrid = plot(
@@ -381,11 +392,14 @@ function main(points::Int=100)
 
     Ce = planestrain(E, ν)
 
-    # Ke = fill(Matrix[], length(elem))
-    for i = 1:length(elem)
-        display(stiffmatrix(elem[i], Ce))
-        # Ke[i] = [stiffmatrix(elem[i], Ce)]
+    println("Finished calculating plane strain")
+
+    Ke = fill(Matrix[], length(elem))
+    Threads.@threads for i = 1:length(elem)
+        Ke[i] = [stiffmatrix(elem[i], Ce)]
     end
+
+    println("Finished calculating the per element stiffness matrix")
 
     # # TODO not working yet
     # def = deformation(E, ν, fext, xyz, Ce, Ke)
@@ -399,5 +413,5 @@ function main(points::Int=100)
 
 end
 
-main(50)
+main()
 # TODO remember to set limit back to 30
