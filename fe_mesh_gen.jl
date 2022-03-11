@@ -109,22 +109,18 @@ end
 
 function condof(elements, xyz)
     # Obtain connective indices between nodes to form elements
-    con = fill(Vector[], length(elements))
+    con = fill(Int[], length(elements))
 
     for (i, element) in enumerate(elements)
-        con[i] = [findall(pos -> pos in element, xyz)]
+        con[i] = [j for j in findall(pos -> pos in element, xyz)]
     end
 
-    # TODO
     # Global DOF for each element (4-node (linear) quadrilateral element)
-    # dof = zeros(Int, size(con, 1), 2 * 4)
-    dof = fill(Vector[], size(con, 1))
-    for i in 1:size(con, 1)
-        dof[i] = [con[i, 1]*2, con[i, 2] * 2 - 1, con[i, 2]*2, con[i, 2] *
-                     2 + 1, con[i, 3]*2, con[i, 3] * 2 + 1, con[i, 4]*2,
-                     con[i, 4] * 2 + 1]
+    dof = fill(Int[], size(con, 1))
 
-        println(con[i])
+    for (i, elem) in enumerate(con)
+        dof[i] = [elem[1] * 2, elem[2] * 2 - 1, elem[2] * 2, elem[2] * 2 + 1,
+                  elem[3] * 2, elem[3] * 2 + 1, elem[4] * 2, elem[4] * 2 + 1]
     end
 
     return con, dof
@@ -164,8 +160,8 @@ using LinearAlgebra
 function straindisp(rc, ξ, η)
     # Natural coors of quadrilateral
     # rc stands for real coors
-    corners = [[rc[1,1],rc[end,1],rc[1,1],rc[end,1]];;
-               [rc[1,2],rc[1,2],rc[end,2],rc[end,2]]]
+    corners = [[rc[1][1],rc[end][1],rc[1][1],rc[end][1]];;
+               [rc[1][2],rc[1][2],rc[end][2],rc[end][2]]]
 
     natcoors = [[-1, 1, 1, -1] [-1, -1, 1, 1]]
 
@@ -176,7 +172,10 @@ function straindisp(rc, ξ, η)
 
     # Elemental Jacobian matrix
     Jmat = dNdnat * corners
+    display(Jmat)
     JmatInv = inv(Jmat)
+    display(JmatInv)
+    println()
     dNdx = sum(JmatInv, dims=2) .* dNdnat
 
     dsB = zeros((3, 8))
@@ -186,13 +185,6 @@ function straindisp(rc, ξ, η)
     dsB[3, 2:2:8] = dNdx[1,:]
 
     return dsB
-end
-
-function jacobian(ξ, η)
-    J = [[1, 0] [0.125 - 0.125*η, 0.375 - ξ*0.125]]
-    invJ = inv(J)
-
-    return invJ
 end
 
 function stiffmatrix(realcoors, Ce)
@@ -222,7 +214,7 @@ function stiffmatrix(realcoors, Ce)
 
         # Calculate K
         dsBT = dsB'
-        sumdsBT = sum(dsBT, dims=2)
+        # sumdsBT = sum(dsBT, dims=2)
         dot1 = dsBT * Ce
         dot2 = dot1 * dsB
         Ke = Ke + dot2 * detJ * w
@@ -309,7 +301,6 @@ end
 
 using Plots; gr()
 using LaTeXStrings
-using LinearAlgebra
 
 function main(points::Int=100)
     ### Generate mesh grid ###
@@ -364,8 +355,6 @@ function main(points::Int=100)
 
     con, dof = condof(elem, xyz)
 
-    display(con)
-
     ### Plotting ###
     meshgrid = plot(
         X, Y,
@@ -391,19 +380,24 @@ function main(points::Int=100)
     fext = -100
 
     Ce = planestrain(E, ν)
-    # TODO change xyz for con in below
-    Ke = stiffmatrix(xyz, Ce)
-    # TODO not working yet
-    def = deformation(E, ν, fext, xyz, Ce, Ke)
 
-    eps11 = 0
-    eps22 = 0
-    gamma12 = 0
+    # Ke = fill(Matrix[], length(elem))
+    for i = 1:length(elem)
+        display(stiffmatrix(elem[i], Ce))
+        # Ke[i] = [stiffmatrix(elem[i], Ce)]
+    end
 
-    # TODO not finished yet
-    σ = stress(xyz, Ce, de)
+    # # TODO not working yet
+    # def = deformation(E, ν, fext, xyz, Ce, Ke)
+
+    # eps11 = 0
+    # eps22 = 0
+    # gamma12 = 0
+
+    # # TODO not finished yet
+    # σ = stress(xyz, Ce, de)
 
 end
 
-main(7)
+main(50)
 # TODO remember to set limit back to 30
