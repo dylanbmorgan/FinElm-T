@@ -324,9 +324,6 @@ function main(points::Int=1000)
     ypoints2 = xpoints1
     xpoints2 = (4 * xpoints1) - 3
 
-    println(Int(xpoints1 * ypoints1) + Int(xpoints2 + ypoints2),
-            " grid points used."); println()
-
     print("Calculating meshpoint arrays...")
 
     # Obtain mesh arrays for solid part edges
@@ -342,10 +339,13 @@ function main(points::Int=1000)
     xyz1, elem1 = mesh(bot1, top1, left1, right1)
     xyz2, elem2 = mesh(bot2, top2, left2, right2)
 
-    println("Done")
+    println("Done"); println()
 
     # Solid nodes concatenated with duplicates removed
     xyz = union(xyz1, xyz2)
+
+    println(length(xyz), " nodes used"); println()
+    # display(xyz)
 
     # Axes for plotting nodes
     X = [i[1] for i in xyz]
