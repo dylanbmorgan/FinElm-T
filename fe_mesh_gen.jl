@@ -17,12 +17,11 @@ function pointsdiff(totpoints, xstart, eright, ystart, etop)
     # Work out number of grid points in x and y directions
     if factor1 > 1
         factor = factor1
-        # ypoints = round(sqrt(totpoints / factor))
+        ypoints = round(sqrt(totpoints / factor))
         xpoints = round(factor * ypoints)
     else
         factor = factor2
         xpoints = round(sqrt(totpoints / factor))
-        # ypoints = round(factor * xpoints)
     end
 
     if iseven(xpoints)
@@ -123,7 +122,7 @@ function condof(elements, xyz)
                   elem[3] * 2, elem[3] * 2 + 1, elem[4] * 2, elem[4] * 2 + 1]
     end
 
-    return con, dof
+    return dof
 end
 
 # New module shapefunctions
@@ -214,7 +213,6 @@ function stiffmatrix(realcoors, Ce)
 
         # Calculate K
         dsBT = dsB'
-        # sumdsBT = sum(dsBT, dims=2)
         dot1 = dsBT * Ce
         dot2 = dot1 * dsB
         Ke = Ke + dot2 * detJ * w
@@ -358,7 +356,7 @@ function main(points::Int=1000)
 
     print("Calculating connecting grid and elemental degrees of freedom...")
 
-    con, dof = condof(elem, xyz)
+    dof = condof(elem, xyz)
 
     println("Done")
     print("Plotting meshgrid...")
@@ -396,15 +394,9 @@ function main(points::Int=1000)
     println("Done")
     print("Calculating the per element stiffness matrix...")
 
-    # Calculate the stiffness matrices per elements
-    # Ke = fill(Matrix[], length(elem))
-    # Threads.@threads for i = 1:length(elem)
-    #     Ke[i] = [stiffmatrix(elem[i], Ce)]
-    # end
-
     Ke = zeros(8, 8, length(elem))
     Threads.@threads for i = 1:length(elem)
-        Ke[:,:,i] = (stiffmatrix(elem[i], Ce))
+        Ke[:,:,i] = stiffmatrix(elem[i], Ce)
     end
 
     println("Done")
@@ -412,26 +404,21 @@ function main(points::Int=1000)
     # Calculate the global stiffness matrix
     # Workaround for Julia's 1-array indexing
 
-    print("Assembling global stiffness matrix")
+    print("Assembling global stiffness matrix...")
 
     Threads.@threads for i = 1:length(dof)
         dof[i] = dof[i] .- 1
     end
 
-    globstiff = zeros(2*length(xyz), 2*length(xyz), length(elem))
-
-    display(Ke[:,:,1])
-    display(dof)
+    globstiff = zeros(2*length(xyz), 2*length(xyz))
 
     Threads.@threads for i = 1:8
         for j = 1:8
-            for m = 1:size(Ke, 3)
-                globstiff[dof[m][j],dof[m][i],m] = Ke[j,i,m]
+            for m = 1:length(elem)
+                globstiff[dof[m][j],dof[m][i]] += Ke[j,i,m]
             end
         end
     end
-
-    globstiff = sum(globstiff, dims=3)
 
     println("Done")
 
@@ -449,5 +436,4 @@ function main(points::Int=1000)
 
 end
 
-main()
-# TODO remember to set limit back to 30
+main(10000)
