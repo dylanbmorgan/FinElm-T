@@ -135,22 +135,22 @@ function planestrain(E, ν)
     return C
 end
 
-function cmat(ξ, η)  # Come back to this
-    ξ += 1
-    cmat = 0.125 * (ξ + 3*η - ξ*η) + 0.625
+# function cmat(ξ, η)  # Come back to this
+#     ξ += 1
+#     cmat = 0.125 * (ξ + 3*η - ξ*η) + 0.625
 
-    return cmat
-end
+#     return cmat
+# end
 
-function shapefuncs(ξ, η)
-    N = zeros(Float64, 4)
-    N[1] = 0.25 * (1 - ξ) * (1 + η)
-    N[2] = 0.25 * (1 - ξ) * (1 - η)
-    N[3] = 0.25 * (1 + ξ) * (1 + η)
-    N[4] = 0.25 * (1 + ξ) * (1 - η)
+# function shapefuncs(ξ, η)
+#     N = zeros(Float64, 4)
+#     N[1] = 0.25 * (1 - ξ) * (1 + η)
+#     N[2] = 0.25 * (1 - ξ) * (1 - η)
+#     N[3] = 0.25 * (1 + ξ) * (1 + η)
+#     N[4] = 0.25 * (1 + ξ) * (1 - η)
 
-    return N
-end
+#     return N
+# end
 
 # New module Elemental
 
@@ -187,7 +187,7 @@ function straindisp(rc, ξ, η)
     return dsB, Jmat
 end
 
-function stiffmatrix(realcoors, Ce)
+function stiffmatrix(xyz, Ce)
     # Stiffness element
     Ke = zeros((8,8))
 
@@ -206,7 +206,7 @@ function stiffmatrix(realcoors, Ce)
         η = gauss[i,2]
 
         # B matrix
-        dsB, J = straindisp(realcoors, ξ, η)
+        dsB, J = straindisp(xyz, ξ, η)
 
         # Jacobian determinant
         detJ = det(J)
@@ -221,91 +221,153 @@ function stiffmatrix(realcoors, Ce)
     return Ke
 end
 
-function deformation(E, ν, fext, coors, C, Ke)
-    # Boundary condition
-    ndof = size(coors, 1)
-    BC = ones(Int, (ndof, 2))
+function forcevec(xyz, top, right, forcearea)
+    f = zeros(2 * length(xyz))
 
-    # Find first and last indices in xyz between 1.5 and 2.5 in x
-    y1 = findfirst(i -> i == 0, coors[:,2])
-    y2 = findlast(j -> j == 0, coors[:,2])
-    lb = findfirst(k -> (k >= 1.5) && (k <= 2.5), coors[:,1])
-    ub = findlast(l -> (l >= 1.5) && (l <= 2.5), coors[y1:y2, 1])
+    Threads.@threads for i = 1:length(xyz)
+        # Extract y positions of top nodes
+        ycoor = filter(isequal(top), xyz[i])
+        append!(ycoor, 0)
+        ynode = ycoor[1]
 
-    # Set these elements = 0
-    BC[lb:ub] .= 0
-    BC = reshape(BC', (length(BC), 1)) # TODO Is there a better way to do this?
-    BCid = findall(!iszero, BC)
-
-    # Apply the loads in the x direction to the top of the solid
-    ytop = findall(i -> i == 5, coors[:,2])
-    rhs = zeros((size(coors, 1), 2))
-    Threads.@threads for j in ytop
-        rhs[j,1] = fext
-    end
-    rhs1 = reshape(rhs', (length(rhs), 1)) # TODO Is there a better way to do this?
-
-    # Non zero elements
-    rhs2 = zeros(length(BCid))
-    Threads.@threads for i = 1:length(BCid)
-        rhs2[i] = rhs1[BCid[i]]
+        f[i * 2] = ynode
     end
 
-    # TODO Find a better way of doing this
-    iBCid = zeros(Int, length(BCid))
-    for i = 1:length(BCid)
-        iBCid[i] = i
+    # Find node indices to apply force to
+    nnodes = findall(!isequal(0), f)
+
+    # Total force on face and force per node
+    tforce = forcearea * right
+    nforce = tforce / length(nnodes)
+
+    Threads.@threads for i = 1:length(nnodes)
+        f[nnodes[i]] = nforce
     end
-    npBCid = NumPyArray(iBCid)
-    npKe = NumPyArray(Ke)
-    # display(npBCid)
-    # display(npKe)
-    # TODO HELP!!!
-    npKe = npKe[np.ix_(npBCid,npBCid)]
 
-    ue = gesvx!(npKe, BCid)
-
-    de = zeros(2 * length(coors))
-    # de[BCid] = ue
+    return f
 end
 
-function stress(realcoors, Ce, de)
-    # Location of Gauss points
-    a = 1/sqrt(3)
+function reducemat(xyz, k, f)
+    # Set boundary conditions to bottom of the shape
+    bci1 = findall(coor -> 0 in coor[2], xyz)
+    bci2 = bci1 .+ bci1[end]
 
-    # Weights of functions
-    w = 1
+    bci = vcat(bci1, bci2)
 
-    # Matrix of Gauss points
-    gauss = [[-a, a, a, -a] [-a, -a, a, a]]
+    # Reduce force vector
+    deleteat!(f, bci)
 
-    σ = zeros(3)
+    display(k)
 
-    vol = 0
+    # Reduce glob stiff matrix
+    flatk = reshape(k, size(k, 1) * size(k, 1))
+    xylen = length(bci)
 
-    for i in 1:4
-        ξ = gauss[0,1]
-
-        # TODO
-
+    for i = 1:size(k, 1) - xylen:length(k) - (size(k, 1) * xylen)
+        exp_bci = bci .+ (i-1)
+        deleteat!(flatk, exp_bci)
     end
 
+    Threads.@threads for i = 1:(size(k, 1) - xylen) * xylen
+        deleteat!(flatk, i)
+    end
+
+    k = reshape(flatk, (size(k, 1) - xylen, size(k, 1) - xylen))
+
+    return k, f
 end
+
+# function getd()
+
+# function deformation(E, ν, fext, coors, C, Ke)
+#     # Boundary condition
+#     ndof = size(coors, 1)
+#     BC = ones(Int, (ndof, 2))
+
+#     # Find first and last indices in xyz between 1.5 and 2.5 in x
+#     y1 = findfirst(i -> i == 0, coors[:,2])
+#     y2 = findlast(j -> j == 0, coors[:,2])
+#     lb = findfirst(k -> (k >= 1.5) && (k <= 2.5), coors[:,1])
+#     ub = findlast(l -> (l >= 1.5) && (l <= 2.5), coors[y1:y2, 1])
+
+#     # Set these elements = 0
+#     BC[lb:ub] .= 0
+#     BC = reshape(BC', (length(BC), 1)) # TODO Is there a better way to do this?
+#     BCid = findall(!iszero, BC)
+
+#     # Apply the loads in the x direction to the top of the solid
+#     ytop = findall(i -> i == 5, coors[:,2])
+#     rhs = zeros((size(coors, 1), 2))
+#     Threads.@threads for j in ytop
+#         rhs[j,1] = fext
+#     end
+#     rhs1 = reshape(rhs', (length(rhs), 1)) # TODO Is there a better way to do this?
+
+#     # Non zero elements
+#     rhs2 = zeros(length(BCid))
+#     Threads.@threads for i = 1:length(BCid)
+#         rhs2[i] = rhs1[BCid[i]]
+#     end
+
+#     # TODO Find a better way of doing this
+#     iBCid = zeros(Int, length(BCid))
+#     for i = 1:length(BCid)
+#         iBCid[i] = i
+#     end
+#     npBCid = NumPyArray(iBCid)
+#     npKe = NumPyArray(Ke)
+#     # display(npBCid)
+#     # display(npKe)
+#     # TODO HELP!!!
+#     npKe = npKe[np.ix_(npBCid,npBCid)]
+
+#     ue = gesvx!(npKe, BCid)
+
+#     de = zeros(2 * length(coors))
+#     # de[BCid] = ue
+# end
+
+# function stress(realcoors, Ce, de)
+#     # Location of Gauss points
+#     a = 1/sqrt(3)
+
+#     # Weights of functions
+#     w = 1
+
+#     # Matrix of Gauss points
+#     gauss = [[-a, a, a, -a] [-a, -a, a, a]]
+
+#     σ = zeros(3)
+
+#     vol = 0
+
+#     for i in 1:4
+#         ξ = gauss[0,1]
+
+#         # TODO
+
+#     end
+
+# end
 
 
 using Plots; gr()
 using LaTeXStrings
+using Profile
 
 function main(points::Int=1000)
     ### Generate mesh grid ###
-    if points < 10
+    if points < 20
         println(points, " grid point have be specified.")
-        println("This can not run with less than 10 grid points!")
+        println("This can not run with less than 20 grid points!")
         println("It is also recommended to use at least 100 grid points.")
-        throw(DomainError(points, "points argument must be ≥ 30"))
+        throw(DomainError(points, "points argument must be ≥ 20"))
     elseif points < 100
-        println("It is recommended to use at least 100 grid points.")
+        println("Warning! It is recommended to use at least 100 grid points.")
+        println()
     end
+
+    points = points / 2.6
 
     # Corners of both parts of solid
     xstart1 = 1.5
@@ -345,7 +407,6 @@ function main(points::Int=1000)
     xyz = union(xyz1, xyz2)
 
     println(length(xyz), " nodes used"); println()
-    # display(xyz)
 
     # Axes for plotting nodes
     X = [i[1] for i in xyz]
@@ -400,29 +461,36 @@ function main(points::Int=1000)
     end
 
     println("Done")
-
-    # Calculate the global stiffness matrix
-    # Workaround for Julia's 1-array indexing
-
     print("Assembling global stiffness matrix...")
 
     Threads.@threads for i = 1:length(dof)
         dof[i] = dof[i] .- 1
     end
 
-    globstiff = zeros(2*length(xyz), 2*length(xyz))
+    # Global stiffness matrix
+    k = zeros(2*length(xyz), 2*length(xyz))
 
     Threads.@threads for i = 1:8
         for j = 1:8
             for m = 1:length(elem)
-                globstiff[dof[m][j],dof[m][i]] += Ke[j,i,m]
+                k[dof[m][j],dof[m][i]] += Ke[j,i,m]
             end
         end
     end
 
     println("Done")
+    print("Calculating the force vector...")
 
-    display(globstiff)
+    # Applied force per unit area
+    forcearea = 100
+    f = forcevec(xyz, etop2, eright2, forcearea)
+
+    println("Done")
+    print("Reducing the force vector and global stiffness matrix...")
+
+    reducemat(xyz, k, f)
+
+    println("done")
 
     # # TODO not working yet
     # def = deformation(E, ν, fext, xyz, Ce, Ke)
@@ -436,4 +504,4 @@ function main(points::Int=1000)
 
 end
 
-main(10000)
+main(20)
