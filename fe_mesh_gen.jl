@@ -125,8 +125,6 @@ function condof(elements, xyz)
     return dof
 end
 
-# New module shapefunctions
-
 function planestrain(E, ν)
     constant = E / ((1 + ν) * (1 - (2*ν)))
     mat = [[1 - ν, ν, 0] [ν, 1 - ν, 0] [0, 0, 0.5*(1 - (2 * ν))]]
@@ -135,24 +133,6 @@ function planestrain(E, ν)
     return C
 end
 
-# function cmat(ξ, η)  # Come back to this
-#     ξ += 1
-#     cmat = 0.125 * (ξ + 3*η - ξ*η) + 0.625
-
-#     return cmat
-# end
-
-# function shapefuncs(ξ, η)
-#     N = zeros(Float64, 4)
-#     N[1] = 0.25 * (1 - ξ) * (1 + η)
-#     N[2] = 0.25 * (1 - ξ) * (1 - η)
-#     N[3] = 0.25 * (1 + ξ) * (1 + η)
-#     N[4] = 0.25 * (1 + ξ) * (1 - η)
-
-#     return N
-# end
-
-# New module Elemental
 
 using LinearAlgebra
 
@@ -187,7 +167,45 @@ function straindisp(rc, ξ, η)
     return dsB, Jmat
 end
 
-function stiffmatrix(xyz, Ce)
+function strainstress(elem, de, C)
+    # Location of Gauss points
+    a = 1/sqrt(3)
+
+    # Weights of functions
+    w = 1
+
+    # Matrix of Gauss points
+    gauss = [[-a, a, a, -a] [-a, -a, a, a]]
+
+    # Vector of elemental stresses
+    σe = zeros(3)
+
+    for i = 1:4
+        # Natural coors
+        ξ = gauss[i,1]
+        η = gauss[i,2]
+
+        # B matrix
+        Be, J = straindisp(elem, ξ, η)
+
+        # Jacobian determinant
+        detJ = det(J)
+
+        # Elemental IP strain
+        ϵeIP = Be * de
+
+        # Elemental IP stress
+        σeIP = C * ϵeIP
+
+        σe += σeIP * detJ * w
+    end
+
+    ϵe = inv(C) * σe
+
+    return σe[1], σe[2], σe[3], ϵe[1], ϵe[2], ϵe[3]
+end
+
+function stiffmatrix(elem, C)
     # Stiffness element
     Ke = zeros((8,8))
 
@@ -206,14 +224,14 @@ function stiffmatrix(xyz, Ce)
         η = gauss[i,2]
 
         # B matrix
-        dsB, J = straindisp(xyz, ξ, η)
+        dsB, J = straindisp(elem, ξ, η)
 
         # Jacobian determinant
         detJ = det(J)
 
         # Calculate K
         dsBT = dsB'
-        dot1 = dsBT * Ce
+        dot1 = dsBT * C
         dot2 = dot1 * dsB
         Ke = Ke + dot2 * detJ * w
     end
@@ -247,113 +265,34 @@ function forcevec(xyz, top, right, forcearea)
     return f
 end
 
-function reducemat(xyz, k, f)
-    # Set boundary conditions to bottom of the shape
+function reducemat!(xyz, k, f)
+    ### Set boundary conditions to bottom of the shape ###
     bci1 = findall(coor -> 0 in coor[2], xyz)
     bci2 = bci1 .+ bci1[end]
-
     bci = vcat(bci1, bci2)
 
-    # Reduce force vector
+    ### Reduce force vector ###
     deleteat!(f, bci)
 
-    display(k)
+    ### Reduce glob stiff matrix ###
+    # Find values in k that aren't in bci
+    freenodes = filter(val -> !(val in bci), 1:size(k, 1))
+    newsize = 1:size(k, 1) - length(bci)  # Size of new array
+    newk = zeros(length(newsize), length(newsize))
 
-    # Reduce glob stiff matrix
-    flatk = reshape(k, size(k, 1) * size(k, 1))
-    xylen = length(bci)
-
-    for i = 1:size(k, 1) - xylen:length(k) - (size(k, 1) * xylen)
-        exp_bci = bci .+ (i-1)
-        deleteat!(flatk, exp_bci)
+    Threads.@threads for (i1, j1) = collect(zip(freenodes, newsize))
+        for (i2, j2) = zip(freenodes, newsize)
+            newk[j2, j1] = k[i2, i1]
+        end
     end
 
-    Threads.@threads for i = 1:(size(k, 1) - xylen) * xylen
-        deleteat!(flatk, i)
-    end
-
-    k = reshape(flatk, (size(k, 1) - xylen, size(k, 1) - xylen))
-
-    return k, f
+    return f, newk, bci
 end
-
-# function getd()
-
-# function deformation(E, ν, fext, coors, C, Ke)
-#     # Boundary condition
-#     ndof = size(coors, 1)
-#     BC = ones(Int, (ndof, 2))
-
-#     # Find first and last indices in xyz between 1.5 and 2.5 in x
-#     y1 = findfirst(i -> i == 0, coors[:,2])
-#     y2 = findlast(j -> j == 0, coors[:,2])
-#     lb = findfirst(k -> (k >= 1.5) && (k <= 2.5), coors[:,1])
-#     ub = findlast(l -> (l >= 1.5) && (l <= 2.5), coors[y1:y2, 1])
-
-#     # Set these elements = 0
-#     BC[lb:ub] .= 0
-#     BC = reshape(BC', (length(BC), 1)) # TODO Is there a better way to do this?
-#     BCid = findall(!iszero, BC)
-
-#     # Apply the loads in the x direction to the top of the solid
-#     ytop = findall(i -> i == 5, coors[:,2])
-#     rhs = zeros((size(coors, 1), 2))
-#     Threads.@threads for j in ytop
-#         rhs[j,1] = fext
-#     end
-#     rhs1 = reshape(rhs', (length(rhs), 1)) # TODO Is there a better way to do this?
-
-#     # Non zero elements
-#     rhs2 = zeros(length(BCid))
-#     Threads.@threads for i = 1:length(BCid)
-#         rhs2[i] = rhs1[BCid[i]]
-#     end
-
-#     # TODO Find a better way of doing this
-#     iBCid = zeros(Int, length(BCid))
-#     for i = 1:length(BCid)
-#         iBCid[i] = i
-#     end
-#     npBCid = NumPyArray(iBCid)
-#     npKe = NumPyArray(Ke)
-#     # display(npBCid)
-#     # display(npKe)
-#     # TODO HELP!!!
-#     npKe = npKe[np.ix_(npBCid,npBCid)]
-
-#     ue = gesvx!(npKe, BCid)
-
-#     de = zeros(2 * length(coors))
-#     # de[BCid] = ue
-# end
-
-# function stress(realcoors, Ce, de)
-#     # Location of Gauss points
-#     a = 1/sqrt(3)
-
-#     # Weights of functions
-#     w = 1
-
-#     # Matrix of Gauss points
-#     gauss = [[-a, a, a, -a] [-a, -a, a, a]]
-
-#     σ = zeros(3)
-
-#     vol = 0
-
-#     for i in 1:4
-#         ξ = gauss[0,1]
-
-#         # TODO
-
-#     end
-
-# end
 
 
 using Plots; gr()
 using LaTeXStrings
-using Profile
+using LinearAlgebra
 
 function main(points::Int=1000)
     ### Generate mesh grid ###
@@ -450,14 +389,14 @@ function main(points::Int=1000)
 
     print("Calculating plane strain...")
 
-    Ce = planestrain(E, ν)
+    C = planestrain(E, ν)
 
     println("Done")
     print("Calculating the per element stiffness matrix...")
 
     Ke = zeros(8, 8, length(elem))
     Threads.@threads for i = 1:length(elem)
-        Ke[:,:,i] = stiffmatrix(elem[i], Ce)
+        Ke[:,:,i] = stiffmatrix(elem[i], C)
     end
 
     println("Done")
@@ -468,12 +407,12 @@ function main(points::Int=1000)
     end
 
     # Global stiffness matrix
-    k = zeros(2*length(xyz), 2*length(xyz))
+    K = zeros(2*length(xyz), 2*length(xyz))
 
     Threads.@threads for i = 1:8
         for j = 1:8
             for m = 1:length(elem)
-                k[dof[m][j],dof[m][i]] += Ke[j,i,m]
+                K[dof[m][j],dof[m][i]] += Ke[j,i,m]
             end
         end
     end
@@ -483,25 +422,57 @@ function main(points::Int=1000)
 
     # Applied force per unit area
     forcearea = 100
-    f = forcevec(xyz, etop2, eright2, forcearea)
+    F = forcevec(xyz, etop2, eright2, forcearea)
 
     println("Done")
     print("Reducing the force vector and global stiffness matrix...")
 
-    reducemat(xyz, k, f)
+    xyzcopy = copy(xyz)
+    Fred, Kred, bc = reducemat!(xyzcopy, K, F)
 
     println("done")
+    print("Solving for d linearly...")
 
-    # # TODO not working yet
-    # def = deformation(E, ν, fext, xyz, Ce, Ke)
+    # Solve
+    Dred = (Fred\Kred)'
 
-    # eps11 = 0
-    # eps22 = 0
-    # gamma12 = 0
+    # Add back fixed nodes
+    D = zeros(length(Dred) + length(bc))
+    Threads.@threads for i = 1:length(bc)
+        D[i] = 0
+    end
 
-    # # TODO not finished yet
-    # σ = stress(xyz, Ce, de)
+    Threads.@threads for (i, j) = collect(zip(length(bc):length(D),
+                                              1:length(Dred)))
+        D[i + 1] = Dred[j]
+    end
+
+    println("done")
+    print("Calculating stresses and strains...")
+
+    de = zeros(length(dof), 8)
+    for (i, elem) in collect(enumerate(dof))
+        for (j, corn) in enumerate(elem)
+            de[i,j] = D[corn]
+        end
+    end
+
+    # convert de to vector of vectors
+    de = [de[i,:] for i in 1:size(de, 1)]
+
+    σ = zeros(length(elem), 3)
+    ϵ = zeros(length(elem), 3)
+
+    Threads.@threads for i = 1:length(elem)
+        σ[i,1], σ[i,2], σ[i,3], ϵ[i,1], ϵ[i,2], ϵ[i,3] = strainstress(elem[i], de[i], C)
+    end
+
+    println("Done")
+
+    # display(ϵ)
+    # display(σ)
 
 end
 
-main(20)
+main(28000)
+# main(20)
