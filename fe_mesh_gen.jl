@@ -1,6 +1,8 @@
 #!/usr/bin/env julia
 
-# Beginning of meshgrid module
+###########################################
+#--------- Module Generate Mesh ----------#
+###########################################
 
 """
     pointsdiff(totpoints, xstart, eright, ystart, etop)
@@ -125,6 +127,10 @@ function condof(elements, xyz)
     return dof
 end
 
+########################################
+#--------- Module Deformation ---------#
+########################################
+
 function planestrain(E, ν)
     constant = E / ((1 + ν) * (1 - (2*ν)))
     mat = [[1 - ν, ν, 0] [ν, 1 - ν, 0] [0, 0, 0.5*(1 - (2 * ν))]]
@@ -165,44 +171,6 @@ function straindisp(rc, ξ, η)
     dsB[3, 2:2:8] = dNdx[1,:]
 
     return dsB, Jmat
-end
-
-function strainstress(elem, de, C)
-    # Location of Gauss points
-    a = 1/sqrt(3)
-
-    # Weights of functions
-    w = 1
-
-    # Matrix of Gauss points
-    gauss = [[-a, a, a, -a] [-a, -a, a, a]]
-
-    # Vector of elemental stresses
-    σe = zeros(3)
-
-    for i = 1:4
-        # Natural coors
-        ξ = gauss[i,1]
-        η = gauss[i,2]
-
-        # B matrix
-        Be, J = straindisp(elem, ξ, η)
-
-        # Jacobian determinant
-        detJ = det(J)
-
-        # Elemental IP strain
-        ϵeIP = Be * de
-
-        # Elemental IP stress
-        σeIP = C * ϵeIP
-
-        σe += σeIP * detJ * w
-    end
-
-    ϵe = inv(C) * σe
-
-    return σe[1], σe[2], σe[3], ϵe[1], ϵe[2], ϵe[3]
 end
 
 function stiffmatrix(elem, C)
@@ -289,19 +257,109 @@ function reducemat!(xyz, k, f)
     return f, newk, bci
 end
 
+function deform(xyz, D, elem, de)
+    # Deform nodes
+    # Convert xyz to match dims of D
+    defxyz = zeros(length(xyz) * 2)
+    Threads.@threads for (i, j) in collect(zip(1:2:length(xyz)*2, 1:length(xyz)))
+        defxyz[i] = xyz[j][1]
+        defxyz[i + 1] = xyz[j][2]
+    end
+
+    # Deform nodes
+    defxyz .+= D
+
+    # Deform elements
+    # Convert elem to match dims of de
+    flatelem = fill(Float64[], length(elem))
+    Threads.@threads for i = 1:length(elem)
+        tmpelem = zeros(8)
+
+        for (j, k) = zip(1:4, 1:2:8)
+            tmpelem[k] = elem[i][j][1]
+            tmpelem[k + 1] = elem[i][j][2]
+        end
+
+        flatelem[i] = tmpelem
+        flatelem[i] += de[i]
+    end
+
+    return defxyz, flatelem
+end
+
+##########################################
+#--------- Module strain stress ---------#
+##########################################
+
+# Needs to link with deform module to get straindisp function
+
+function strainstress(elem, de, C)
+    # Location of Gauss points
+    a = 1/sqrt(3)
+
+    # Weights of functions
+    w = 1
+
+    # Matrix of Gauss points
+    gauss = [[-a, a, a, -a] [-a, -a, a, a]]
+
+    # Vector of elemental stresses
+    σe = zeros(3)
+
+    for i = 1:4
+        # Natural coors
+        ξ = gauss[i,1]
+        η = gauss[i,2]
+
+        # B matrix
+        Be, J = straindisp(elem, ξ, η)
+
+        # Jacobian determinant
+        detJ = det(J)
+
+        # Elemental IP strain
+        ϵeIP = Be * de
+
+        # Elemental IP stress
+        σeIP = C * ϵeIP
+
+        σe += σeIP * detJ * w
+    end
+
+    ϵe = inv(C) * σe
+
+    return σe[1], σe[2], σe[3], ϵe[1], ϵe[2], ϵe[3]
+end
+
+#################################
+#--------- Module plot ---------#
+#################################
 
 using Plots; gr()
 using LaTeXStrings
 using Colors
 using Statistics
 
-function plot(elem, xyz, σ)
-    ### General ###
+function graph(elem, xyz, σ)
+    ### Nodes ###
+    # X1 = [i[1] for i in xyz]
+    # Y1 = [j[2] for j in xyz]
+
+    X1 = zeros(Int(length(xyz) / 2))
+    Y1 = zeros(Int(length(xyz) / 2))
+    for (i, j) in zip(1:2:length(xyz), 1:Int(length(xyz) / 2))
+        X1[j] = xyz[i]
+        Y1[j] = xyz[i + 1]
+    end
+
     grid = plot(
+        X1, Y1,
+        seriestype = :scatter,
+        markersize = 1.5, markershape = :circle, markercolor = :blue,
         aspect_ratio = :equal,
         framestyle = :origin,
-        xlim = (-0.2, 4.2),
-        ylim = (-0.2, 5.2),
+        # xlim = (-0.2, 4.2),
+        # ylim = (-0.2, 5.2),
         legend = :none,
         xlabel = L"$x_1$",
         ylabel = L"$x_2$",
@@ -310,28 +368,26 @@ function plot(elem, xyz, σ)
     ###############
 
     ### Elements ###
-    X1 = fill(Float64[], length(elem))
-    Y1 = copy(X1)
+    X2 = fill(Float64[], length(elem))
+    Y2 = copy(X2)
 
     for i = 1:length(elem)
-        X1[i] = zeros(4)
-        Y1[i] = zeros(4)
+        X2[i] = zeros(4)
+        Y2[i] = zeros(4)
     end
 
     # TODO write comments in this function
     for i = 1:length(elem)
         for (j, k) in zip(1:2:8, 1:4)
-            X1[i][k] = elem[i][j]
-            Y1[i][k] = elem[i][j + 1]
+            X2[i][k] = elem[i][j]
+            Y2[i][k] = elem[i][j + 1]
         end
     end
 
     # test = range(HSV(0,1,1), stop=HSV(360,1,1), length=90)
-    display(σ)
+    # display(σ)
 
-    count = 0
-    for (x, y) in (zip(X1, Y1))
-        count += 1
+    for (x, y) in (zip(X2, Y2))
         plot!(
             Shape([x[1], x[2], x[3], x[4]], [y[1], y[2], y[3], y[4]]),
             fill = nothing #test[count]
@@ -339,17 +395,8 @@ function plot(elem, xyz, σ)
     end
     ###############
 
-    ### Nodes ###
-    X2 = [i[1] for i in xyz]
-    Y2 = [j[2] for j in xyz]
-
-    plot!(
-        X2, Y2,
-        seriestype = :scatter,
-        markersize = 1.5, markershape = :circle, markercolor = :blue,
-    )
-
     display(grid)
+
 
     # X3 = zeros(length(X1))
     # Y3 = zeros(length(Y1))
@@ -369,6 +416,9 @@ function plot(elem, xyz, σ)
 
 end
 
+##################################
+#--------- MAIN PROGRAM ---------#
+##################################
 
 function main(points::Int=1000)
     ### Generate mesh grid ###
@@ -433,7 +483,7 @@ function main(points::Int=1000)
     ### Deformation ###
     # Material properties
     E = 1e7
-    ν = 0.34
+    ν = 0.31
 
     # Applied load
     fext = -100
@@ -481,7 +531,7 @@ function main(points::Int=1000)
     Fred, Kred, bc = reducemat!(xyzcopy, K, F)
 
     println("done")
-    print("Solving for d linearly...")
+    print("Solving for D linearly...")
 
     # Solve
     Dred = (Fred\Kred)'
@@ -497,10 +547,10 @@ function main(points::Int=1000)
     end
 
     println("done")
-    print("Calculating stresses and strains...")
+    print("Deforming nodes and elements...")
 
     de = zeros(length(dof), 8)
-    for (i, elem) in collect(enumerate(dof))
+    Threads.@threads for (i, elem) in collect(enumerate(dof))
         for (j, corn) in enumerate(elem)
             de[i,j] = D[corn]
         end
@@ -508,6 +558,13 @@ function main(points::Int=1000)
 
     # convert de to vector of vectors
     de = [de[i,:] for i in 1:size(de, 1)]
+
+    defxyz, flatelem = deform(xyz, D, elem, de)
+
+    println("Done")
+
+    ### Calculate stress and strain ###
+    print("Calculating stresses and strains...")
 
     σ = zeros(length(elem), 3)
     ϵ = zeros(length(elem), 3)
@@ -518,25 +575,10 @@ function main(points::Int=1000)
 
     println("Done")
 
-    ### Deform elements ###
-    # Convert elem to match dims of de
-    flatelem = fill(Float64[], length(elem))
-
-    Threads.@threads for (i, val1) in collect(enumerate(elem))
-        tmpelem = zeros(8)
-
-        for (j, k) = zip(1:4, 1:2:8)
-            tmpelem[k] = elem[i][j][1]
-            tmpelem[k + 1] = elem[i][j][2]
-        end
-
-        flatelem[i] = tmpelem
-        # flatelem[i] += de[i]
-    end
-
+    ### Plotting ###
     print("Plotting...")
 
-    plot(flatelem, xyz, σ)
+    graph(flatelem, defxyz, σ)
 
     println("Done")
 
