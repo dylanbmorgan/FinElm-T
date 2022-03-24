@@ -292,7 +292,83 @@ end
 
 using Plots; gr()
 using LaTeXStrings
-using LinearAlgebra
+using Colors
+using Statistics
+
+function plot(elem, xyz, σ)
+    ### General ###
+    grid = plot(
+        aspect_ratio = :equal,
+        framestyle = :origin,
+        xlim = (-0.2, 4.2),
+        ylim = (-0.2, 5.2),
+        legend = :none,
+        xlabel = L"$x_1$",
+        ylabel = L"$x_2$",
+        title = "Elements"
+    )
+    ###############
+
+    ### Elements ###
+    X1 = fill(Float64[], length(elem))
+    Y1 = copy(X1)
+
+    for i = 1:length(elem)
+        X1[i] = zeros(4)
+        Y1[i] = zeros(4)
+    end
+
+    # TODO write comments in this function
+    for i = 1:length(elem)
+        for (j, k) in zip(1:2:8, 1:4)
+            X1[i][k] = elem[i][j]
+            Y1[i][k] = elem[i][j + 1]
+        end
+    end
+
+    # test = range(HSV(0,1,1), stop=HSV(360,1,1), length=90)
+    display(σ)
+
+    count = 0
+    for (x, y) in (zip(X1, Y1))
+        count += 1
+        plot!(
+            Shape([x[1], x[2], x[3], x[4]], [y[1], y[2], y[3], y[4]]),
+            fill = nothing #test[count]
+        )
+    end
+    ###############
+
+    ### Nodes ###
+    X2 = [i[1] for i in xyz]
+    Y2 = [j[2] for j in xyz]
+
+    plot!(
+        X2, Y2,
+        seriestype = :scatter,
+        markersize = 1.5, markershape = :circle, markercolor = :blue,
+    )
+
+    display(grid)
+
+    # X3 = zeros(length(X1))
+    # Y3 = zeros(length(Y1))
+    # for i = 1:length(X1)
+    #     X3[i] = mean(X1[i])
+    #     Y3[i] = mean(Y1[i])
+    # end
+
+    # Z3 = σ[:,1]
+
+    # Z3 = zeros(length(X3), length(Y3))
+    # for i = 1:length(X3)
+    #     for j = 1:length(Y3)
+    #         Z3[i,j] = i*j
+    #     end
+    # end
+
+end
+
 
 function main(points::Int=1000)
     ### Generate mesh grid ###
@@ -328,10 +404,8 @@ function main(points::Int=1000)
     print("Calculating meshpoint arrays...")
 
     # Obtain mesh arrays for solid part edges
-    bot1, top1, left1, right1 = mesharrays(Int(xpoints1), Int(ypoints1), xstart1, ystart1,
-                                     etop1, eright1)
-    bot2, top2, left2, right2 = mesharrays(Int(xpoints2), Int(ypoints2), xstart2, ystart2,
-                                     etop2, eright2)
+    bot1, top1, left1, right1 = mesharrays(Int(xpoints1), Int(ypoints1), xstart1, ystart1, etop1, eright1)
+    bot2, top2, left2, right2 = mesharrays(Int(xpoints2), Int(ypoints2), xstart2, ystart2, etop2, eright2)
 
     println("Done")
     print("Calculating meshgrid coordinates and solid elements...")
@@ -347,35 +421,12 @@ function main(points::Int=1000)
 
     println(length(xyz), " nodes used"); println()
 
-    # Axes for plotting nodes
-    X = [i[1] for i in xyz]
-    Y = [j[2] for j in xyz]
-
     # Combine elements from 2 solid shapes
     elem = vcat(elem1, elem2)
 
     print("Calculating connecting grid and elemental degrees of freedom...")
 
     dof = condof(elem, xyz)
-
-    println("Done")
-    print("Plotting meshgrid...")
-
-    ### Plotting ###
-    meshgrid = plot(
-        X, Y,
-        seriestype = :scatter,
-        aspect_ratio = :equal,
-        xlim = (-0.2, 4.2),
-        ylim = (-0.2, 5.2),
-        legend = :none,
-        markersize = 1, markershape = :circle, markercolor = :black,
-        xlabel = L"$x_1$",
-        ylabel = L"$x_2$",
-        title = "Meshgrid"
-    )
-
-    display(meshgrid)
 
     println("Done")
 
@@ -421,8 +472,7 @@ function main(points::Int=1000)
     print("Calculating the force vector...")
 
     # Applied force per unit area
-    forcearea = 100
-    F = forcevec(xyz, etop2, eright2, forcearea)
+    F = forcevec(xyz, etop2, eright2, fext)
 
     println("Done")
     print("Reducing the force vector and global stiffness matrix...")
@@ -442,8 +492,7 @@ function main(points::Int=1000)
         D[i] = 0
     end
 
-    Threads.@threads for (i, j) = collect(zip(length(bc):length(D),
-                                              1:length(Dred)))
+    Threads.@threads for (i, j) = collect(zip(length(bc):length(D), 1:length(Dred)))
         D[i + 1] = Dred[j]
     end
 
@@ -469,10 +518,28 @@ function main(points::Int=1000)
 
     println("Done")
 
-    # display(ϵ)
-    # display(σ)
+    ### Deform elements ###
+    # Convert elem to match dims of de
+    flatelem = fill(Float64[], length(elem))
+
+    Threads.@threads for (i, val1) in collect(enumerate(elem))
+        tmpelem = zeros(8)
+
+        for (j, k) = zip(1:4, 1:2:8)
+            tmpelem[k] = elem[i][j][1]
+            tmpelem[k + 1] = elem[i][j][2]
+        end
+
+        flatelem[i] = tmpelem
+        # flatelem[i] += de[i]
+    end
+
+    print("Plotting...")
+
+    plot(flatelem, xyz, σ)
+
+    println("Done")
 
 end
 
-main(28000)
-# main(20)
+main(500)
