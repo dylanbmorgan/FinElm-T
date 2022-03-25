@@ -1,5 +1,3 @@
-#!/usr/bin/env julia
-
 ##########################
 #--------- MAIN ---------#
 ##########################
@@ -12,7 +10,21 @@ include("Graph.jl")
 using LinearAlgebra
 
 
-function main(points::Int=1000, scalefac=1e11)
+"""
+    finelm(time, points, scalefac, interactive, writefile, filename, figpath)
+
+Perform finite element analysis of a T.
+"""
+function finelm(
+    time::Bool=false,
+    points::Int=2000,
+    scalefac::Float64=1e11,
+    interactive::Int=1,
+    writefile::Bool=false,
+    filename::String="../output/run.out",
+    figpath::String="../output/"
+    )
+
     ### Generate mesh grid ###
     if points < 20
         println(points, " grid point have be specified.")
@@ -22,6 +34,23 @@ function main(points::Int=1000, scalefac=1e11)
     elseif points < 100
         println("Warning! It is recommended to use at least 100 grid points.")
         println()
+    end
+
+    if writefile == true
+        print("Output is being redirected to a file...")
+        open(filename, "w") do io
+            redirect_stdout(io) do
+                if time == true
+                    @time finelm(time, points, scalefac, interactive, false, filename, figpath)
+                else
+                    finelm(time, points, scalefac, interactive, false, filename, figpath)
+                end
+            end
+        end
+        println("Done")
+        println()
+        print("Time taken:")
+        return nothing
     end
 
     points = points / 2.6
@@ -135,7 +164,7 @@ function main(points::Int=1000, scalefac=1e11)
     end
 
     Threads.@threads for (i, j) = collect(zip(length(bc):length(D), 1:length(Dred)))
-        D[i + 1] = Dred[j]
+        D[i+1] = Dred[j]
     end
 
     println("done")
@@ -171,10 +200,13 @@ function main(points::Int=1000, scalefac=1e11)
     ### Plotting ###
     print("Plotting...")
 
-    graph(xyz, defxyz, elem, σ, ϵ)
+    graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
 
     println("Done")
 
+   if time == true
+        println()
+        println("Run information:")
+        print("Total runtime:")
+    end
 end
-
-main(2000)

@@ -8,7 +8,7 @@ using PyCall; @pyimport matplotlib.pyplot as plt
 using LaTeXStrings
 
 
-function graph(xyz, defxyz, elem, σ, ϵ)
+function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
     ### Original nodes ###
     X1 = [i[1] for i in xyz]
     Y1 = [j[2] for j in xyz]
@@ -54,7 +54,16 @@ function graph(xyz, defxyz, elem, σ, ϵ)
         titlefontsize = 10
     )
 
-    display(plot(grid1, grid2))
+    disp = plot(grid1, grid2)
+
+    if interactive == 1
+        savefig(disp, "$(figpath)displacement.png")
+    elseif interactive == 2
+        display(disp)
+    elseif interactive == 3
+        savefig(disp, "$(figpath)displacement.png")
+        display(disp)
+    end
 
     ######################
 
@@ -104,51 +113,69 @@ function graph(xyz, defxyz, elem, σ, ϵ)
         Y3U[j] = sum(yval) / 4
     end
 
-    display(σ[:, 1])
-
     # Plot
-    fig, ax = plt.subplots(2, 3, figsize=(5, 5))
+    fig, ax = plt.subplots(2, 3, figsize=(16, 9))
 
-    ax[1,1].tricontourf(X3L, Y3L, σ[1:lowerindex, 1],
-                        levels=[findmin(σ[:,1])[1], findmax(σ[:,1])[1]])
+    # Components of stress vector
+    g1 = ax[1,1].tricontourf(X3L, Y3L, σ[1:lowerindex, 1],
+                             levels=LinRange(findmin(σ[:,1])[1], findmax(σ[:,1])[1], 16))
     ax[1,1].tricontourf(X3U, Y3U, σ[upperindex:length(elem), 1],
-                        levels=[findmin(σ[:,1])[1], findmax(σ[:,1])[1]])
-    ax[1,1].set_title(L"σ_{11}")
-    ax[1,2].tricontourf(X3L, Y3L, σ[1:lowerindex, 2],
-                        levels=[findmin(σ[:,2])[1], findmax(σ[:,2])[1]])
-    ax[1,2].tricontourf(X3U, Y3U, σ[upperindex:length(elem), 2],
-                        levels=[findmin(σ[:,2])[1], findmax(σ[:,2])[1]])
-    ax[1,2].set_title(L"σ_{22}")
-    ax[1,3].tricontourf(X3L, Y3L, σ[1:lowerindex, 3],
-                        levels=[findmin(σ[:,3])[1], findmax(σ[:,3])[1]])
-    ax[1,3].tricontourf(X3U, Y3U, σ[upperindex:length(elem), 2],
-                        levels=[findmin(σ[:,3])[1], findmax(σ[:,3])[1]])
-    ax[1,3].set_title(L"σ_{12}")
+                        levels=LinRange(findmin(σ[:,1])[1], findmax(σ[:,1])[1], 16))
+    ax[1,1].set_title(L"σ_{11}", fontsize=20)
+    fig.colorbar(g1, ax=ax[1,1], shrink=0.7)
 
-    ax[2,1].tricontourf(X3L, Y3L, ϵ[1:lowerindex], 1)
-    ax[2,1].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 1])
-    ax[2,1].set_title(L"ϵ_{11}")
-    ax[2,2].tricontourf(X3L, Y3L, ϵ[1:lowerindex], 2)
-    ax[2,2].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 2])
-    ax[2,2].set_title(L"ϵ_{22}")
-    ax[2,3].tricontourf(X3L, Y3L, ϵ[1:lowerindex], 3)
-    ax[2,3].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 3])
-    ax[2,3].set_title(L"γ_{12}")
+    g2 = ax[1,2].tricontourf(X3L, Y3L, σ[1:lowerindex, 2],
+                             levels=LinRange(findmin(σ[:,2])[1], findmax(σ[:,2])[1], 16))
+    ax[1,2].tricontourf(X3U, Y3U, σ[upperindex:length(elem), 2],
+                        levels=LinRange(findmin(σ[:,2])[1], findmax(σ[:,2])[1], 16))
+    ax[1,2].set_title(L"σ_{22}", fontsize=20)
+    fig.colorbar(g2, ax=ax[1,2], shrink=0.7)
+
+    g3 = ax[1,3].tricontourf(X3L, Y3L, σ[1:lowerindex, 3],
+                             levels=LinRange(findmin(σ[:,3])[1], findmax(σ[:,3])[1], 16))
+    ax[1,3].tricontourf(X3U, Y3U, σ[upperindex:length(elem), 3],
+                        levels=LinRange(findmin(σ[:,3])[1], findmax(σ[:,3])[1], 16))
+    ax[1,3].set_title(L"σ_{12}", fontsize=20)
+    fig.colorbar(g3, ax=ax[1,3], shrink=0.7)
+
+    # Components of strain vector
+    g4 = ax[2,1].tricontourf(X3L, Y3L, ϵ[1:lowerindex, 1],
+                             levels=LinRange(findmin(ϵ[:,1])[1], findmax(ϵ[:,1])[1], 16))
+    ax[2,1].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 1],
+                        levels=LinRange(findmin(ϵ[:,1])[1], findmax(ϵ[:,1])[1], 16))
+    ax[2,1].set_title(L"ϵ_{11}", fontsize=20)
+    fig.colorbar(g4, ax=ax[2,1], shrink=0.7)
+
+    g5 = ax[2,2].tricontourf(X3L, Y3L, ϵ[1:lowerindex, 2],
+                             levels=LinRange(findmin(ϵ[:,2])[1], findmax(ϵ[:,2])[1], 16))
+    ax[2,2].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 2],
+                        levels=LinRange(findmin(ϵ[:,2])[1], findmax(ϵ[:,2])[1], 16))
+    ax[2,2].set_title(L"ϵ_{22}", fontsize=20)
+    fig.colorbar(g5, ax=ax[2,2], shrink=0.7)
+
+    g6 = ax[2,3].tricontourf(X3L, Y3L, ϵ[1:lowerindex, 3],
+                             levels=LinRange(findmin(ϵ[:,3])[1], findmax(ϵ[:,3])[1], 16))
+    ax[2,3].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 3],
+                        levels=LinRange(findmin(ϵ[:,3])[1], findmax(ϵ[:,3])[1], 16))
+    ax[2,3].set_title(L"γ_{12}", fontsize=20)
+    fig.colorbar(g6, ax=ax[2,3], shrink=0.7)
 
     for i in ax
-        i.set(xlabel=L"$x_1$", ylabel=L"$x_2$")
+        i.set_xlabel(L"$x_1$", fontsize=15)
+        i.set_ylabel(L"$x_2$", fontsize=15)
+        i.set_xlim(0, 4)
+        i.set_ylim(0, 5)
         i.set_aspect("equal")
     end
 
-    fig.suptitle("Stresses and Strains")
     fig.tight_layout()
-    # plt.colorbar(ax)
 
-    # ax[2,2].set_title
-    # ax1.legend
-    # ax2.legend
-    # ax1.colorbar
-    # ax2.colorbar
-    plt.show()
-
+    if interactive == 1
+        plt.savefig("$(figpath)strainstress.png")
+    elseif interactive == 2
+        plt.show()
+    elseif interactive == 3
+        plt.savefig("$(figpath)strainstress.png")
+        plt.show()
+    end
 end
