@@ -156,7 +156,7 @@ function finelm(
     println("done")
     print("Solving for D linearly...")
 
-    # Solve
+    # Solve linearly
     Dred = (Fred\inv(Kred))'
 
     # Add back fixed nodes
@@ -206,6 +206,7 @@ function finelm(
 
     println("Done")
 
+    # Display some run information
    if time == true
         println()
         println("Run information:")

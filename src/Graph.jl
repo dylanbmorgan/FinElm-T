@@ -72,7 +72,7 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
     ### Stresses ###
     # Split important bits of elem array up into a vector
     flatelem = zeros(length(elem) * 4)
-    for (i, j) in zip(1:length(elem), 1:4:length(flatelem))
+    Threads.@threads for (i, j) in collect(zip(1:length(elem), 1:4:length(flatelem)))
         flatelem[j] = elem[i][1][1]
         flatelem[j+1] = elem[i][2][1]
         flatelem[j+2] = elem[i][3][1]
@@ -84,7 +84,7 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
     # Lower half of shape
     X3L = zeros(lowerindex)
     Y3L = copy(X3L)
-    for i = 1:lowerindex
+    Threads.@threads for i = 1:lowerindex
         xval = 0
         yval = 0
 
@@ -102,7 +102,7 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
     updiff = length(elem) - upperindex + 1
     X3U = zeros(updiff)
     Y3U = copy(X3U)
-    for (i, j) = zip(upperindex:length(elem), 1:updiff)
+    Threads.@threads for (i, j) in collect(zip(upperindex:length(elem), 1:updiff))
         xval = 0
         yval = 0
 
