@@ -50,7 +50,7 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
         legend = :none,
         xlabel = L"$x_1$",
         ylabel = L"$x_2$",
-        title = "Deformed Grid",
+        title = "Scaled Deformed Grid",
         titlefontsize = 10
     )
 

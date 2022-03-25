@@ -8,6 +8,8 @@ include("StrainStress.jl")
 include("Graph.jl")
 
 using LinearAlgebra
+using Statistics
+using PrettyTables
 
 
 """
@@ -197,6 +199,39 @@ function finelm(
         σ[i,1], σ[i,2], σ[i,3], ϵ[i,1], ϵ[i,2], ϵ[i,3] = strainstress(elem[i], de[i], C)
     end
 
+    # Calculate average, max, and min of stress, strain, and deformation
+    tableD = []
+    σ1 = []
+    σ2 = []
+    σ3 = []
+    ϵ1 = []
+    ϵ2 = []
+    ϵ3 = []
+
+    append!(tableD, round(mean(D), sigdigits=6))
+    append!(tableD, round(findmax(D)[1], sigdigits=6))
+    append!(tableD, round(findmin(D)[1], sigdigits=6))
+
+    for i = 1:3
+        append!(σ1, round(mean(σ[:,i]), sigdigits=6))
+        append!(σ2, round(findmax(σ[:,i])[1], sigdigits=6))
+        append!(σ3, round(findmin(σ[:,i])[1], sigdigits=6))
+        append!(ϵ1, round(mean(ϵ[:,i]), sigdigits=6))
+        append!(ϵ2, round(findmax(ϵ[:,i])[1], sigdigits=6))
+        append!(ϵ3, round(findmin(ϵ[:,i])[1], sigdigits=6))
+    end
+
+    prepend!(tableD, ["D"])
+    prepend!(σ1, ["σ_11"])
+    prepend!(σ2, ["σ_12"])
+    prepend!(σ3, ["σ_22"])
+    prepend!(ϵ1, ["ϵ_11"])
+    prepend!(ϵ2, ["ϵ_22"])
+    prepend!(ϵ3, ["γ_12"])
+
+    # Format data to be displayed in table
+    tabledata = permutedims([tableD;; σ1;; σ2;; ϵ1;; ϵ2;; ϵ3])
+
     println("Done")
 
     ### Plotting ###
@@ -205,6 +240,12 @@ function finelm(
     graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
 
     println("Done")
+
+    println()
+    println("Computed Quantities:")
+    pretty_table(tabledata;
+                 header = (["Quantity", "Mean", "Max", "Min"])
+                 )
 
     # Display some run information
    if time == true

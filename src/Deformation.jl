@@ -142,24 +142,5 @@ function deform(xyz, D, scalefac)
     D .*= scalefac
     defxyz .+= D
 
-    #=
-    # Deform elements
-    # Convert elem to match dims of de
-    flatelem = fill(Float64[], length(elem))
-    Threads.@threads for i = 1:length(elem)
-        tmpelem = zeros(8)
-
-        for (j, k) = zip(1:4, 1:2:8)
-            tmpelem[k] = elem[i][j][1]
-            tmpelem[k + 1] = elem[i][j][2]
-        end
-
-        flatelem[i] = tmpelem
-        flatelem[i] += (de[i] * 1e12)
-    end
-
-    return flatelem
-    =#
-
     return defxyz
 end
