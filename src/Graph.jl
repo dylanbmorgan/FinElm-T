@@ -54,8 +54,10 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
         titlefontsize = 10
     )
 
+    # Plot subplots
     disp = plot(grid1, grid2)
 
+    # Change whether fig is saved or displayed depending on arg
     if interactive == 1
         savefig(disp, "$(figpath)displacement.png")
     elseif interactive == 2
@@ -114,6 +116,8 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
     end
 
     # Plot
+    # Using matplotlib for this from a python call isn't ideal
+    # but it's probably the best/easiest way to plot it
     fig, ax = plt.subplots(2, 3, figsize=(16, 9))
 
     # Components of stress vector
@@ -160,6 +164,7 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
     ax[2,3].set_title(L"γ_{12}", fontsize=20)
     fig.colorbar(g6, ax=ax[2,3], shrink=0.7)
 
+    # Adjust some parameters
     for i in ax
         i.set_xlabel(L"$x_1$", fontsize=15)
         i.set_ylabel(L"$x_2$", fontsize=15)
@@ -168,8 +173,9 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
         i.set_aspect("equal")
     end
 
-    fig.tight_layout()
+    fig.tight_layout()  # Better spacing between subplots
 
+    # Change whether fig is saved or displayed depending on arg
     if interactive == 1
         plt.savefig("$(figpath)strainstress.png")
     elseif interactive == 2

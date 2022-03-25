@@ -25,7 +25,7 @@ function finelm(
     figpath::String="../output/"
     )
 
-    ### Generate mesh grid ###
+    # Check supplied number of nodes
     if points < 20
         println(points, " grid point have be specified.")
         println("This can not run with less than 20 grid points!")
@@ -36,6 +36,7 @@ function finelm(
         println()
     end
 
+    # Write output to file if arg is supplied
     if writefile == true
         print("Output is being redirected to a file...")
         open(filename, "w") do io
@@ -53,6 +54,7 @@ function finelm(
         return nothing
     end
 
+    ### Generate mesh grid ###
     points = points / 2.6
 
     # Corners of both parts of solid
