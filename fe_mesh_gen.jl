@@ -131,6 +131,8 @@ end
 #--------- Module Deformation ---------#
 ########################################
 
+using LinearAlgebra
+
 function planestrain(E, ν)
     constant = E / ((1 + ν) * (1 - (2*ν)))
     mat = [[1 - ν, ν, 0] [ν, 1 - ν, 0] [0, 0, 0.5*(1 - (2 * ν))]]
@@ -138,9 +140,6 @@ function planestrain(E, ν)
 
     return C
 end
-
-
-using LinearAlgebra
 
 function straindisp(rc, ξ, η)
     # Natural coors of quadrilateral
@@ -201,7 +200,7 @@ function stiffmatrix(elem, C)
         dsBT = dsB'
         dot1 = dsBT * C
         dot2 = dot1 * dsB
-        Ke = Ke + dot2 * detJ * w
+        Ke = Ke + dot2 * detJ * w * 10
     end
 
     return Ke
@@ -257,7 +256,7 @@ function reducemat!(xyz, k, f)
     return f, newk, bci
 end
 
-function deform(xyz, D, elem, de)
+function deform(xyz, D, scalefac)
     # Deform nodes
     # Convert xyz to match dims of D
     defxyz = zeros(length(xyz) * 2)
@@ -266,9 +265,11 @@ function deform(xyz, D, elem, de)
         defxyz[i + 1] = xyz[j][2]
     end
 
-    # Deform nodes
+    # Deform nodes including scaling factor
+    D .*= scalefac
     defxyz .+= D
 
+    #=
     # Deform elements
     # Convert elem to match dims of de
     flatelem = fill(Float64[], length(elem))
@@ -281,10 +282,13 @@ function deform(xyz, D, elem, de)
         end
 
         flatelem[i] = tmpelem
-        flatelem[i] += de[i]
+        flatelem[i] += (de[i] * 1e12)
     end
 
-    return defxyz, flatelem
+    return flatelem
+    =#
+
+    return defxyz
 end
 
 ##########################################
@@ -336,83 +340,151 @@ end
 #################################
 
 using Plots; gr()
+using PyCall; @pyimport matplotlib.pyplot as plt
 using LaTeXStrings
-using Colors
-using Statistics
 
-function graph(elem, xyz, σ)
-    ### Nodes ###
-    # X1 = [i[1] for i in xyz]
-    # Y1 = [j[2] for j in xyz]
+function graph(xyz, defxyz, elem, σ, ϵ)
+    ### Original nodes ###
+    X1 = [i[1] for i in xyz]
+    Y1 = [j[2] for j in xyz]
 
-    X1 = zeros(Int(length(xyz) / 2))
-    Y1 = zeros(Int(length(xyz) / 2))
-    for (i, j) in zip(1:2:length(xyz), 1:Int(length(xyz) / 2))
-        X1[j] = xyz[i]
-        Y1[j] = xyz[i + 1]
-    end
-
-    grid = plot(
+    grid1 = plot(
         X1, Y1,
         seriestype = :scatter,
-        markersize = 1.5, markershape = :circle, markercolor = :blue,
+        markershape = :circle, markercolor = :blue,
+        markerstrokewidth = 0, markersize = 1.5,
         aspect_ratio = :equal,
         framestyle = :origin,
-        # xlim = (-0.2, 4.2),
-        # ylim = (-0.2, 5.2),
+        xlim = (-0.2, 4.2),
+        ylim = (-0.2, 5.2),
         legend = :none,
         xlabel = L"$x_1$",
         ylabel = L"$x_2$",
-        title = "Elements"
+        title = "Undeformed Grid",
+        titlefontsize = 10
     )
     ###############
 
-    ### Elements ###
-    X2 = fill(Float64[], length(elem))
+    ### Deformed nodes ###
+    X2 = zeros(length(xyz))
     Y2 = copy(X2)
-
-    for i = 1:length(elem)
-        X2[i] = zeros(4)
-        Y2[i] = zeros(4)
+    Threads.@threads for (i, j) in collect(zip(1:2:length(defxyz), 1:length(xyz)))
+        X2[j] = defxyz[i]
+        Y2[j] = defxyz[i + 1]
     end
 
-    # TODO write comments in this function
-    for i = 1:length(elem)
-        for (j, k) in zip(1:2:8, 1:4)
-            X2[i][k] = elem[i][j]
-            Y2[i][k] = elem[i][j + 1]
+    grid2 = plot(
+        X2, Y2,
+        seriestype = :scatter,
+        markershape = :circle, markercolor = :red,
+        markerstrokewidth=0, markersize = 1.5,
+        aspect_ratio = :equal,
+        framestyle = :origin,
+        xlim = (-0.2, 4.2),
+        ylim = (-0.2, 5.2),
+        legend = :none,
+        xlabel = L"$x_1$",
+        ylabel = L"$x_2$",
+        title = "Deformed Grid",
+        titlefontsize = 10
+    )
+
+    display(plot(grid1, grid2))
+
+    ######################
+
+    ### Stresses ###
+    # Split important bits of elem array up into a vector
+    flatelem = zeros(length(elem) * 4)
+    for (i, j) in zip(1:length(elem), 1:4:length(flatelem))
+        flatelem[j] = elem[i][1][1]
+        flatelem[j+1] = elem[i][2][1]
+        flatelem[j+2] = elem[i][3][1]
+        flatelem[j+3] = elem[i][4][1]
+    end
+
+    lowerindex = trunc(Int, (findfirst(isequal(0), flatelem) - 1) / 4)
+
+    # Lower half of shape
+    X3L = zeros(lowerindex)
+    Y3L = copy(X3L)
+    for i = 1:lowerindex
+        xval = 0
+        yval = 0
+
+        for j = 1:4
+            xval += elem[i][j][1]
+            yval += elem[i][j][2]
         end
+
+        X3L[i] = sum(xval) / 4
+        Y3L[i] = sum(yval) / 4
     end
 
-    # test = range(HSV(0,1,1), stop=HSV(360,1,1), length=90)
-    # display(σ)
+    # Upper half of shape
+    upperindex = lowerindex + 1
+    updiff = length(elem) - upperindex + 1
+    X3U = zeros(updiff)
+    Y3U = copy(X3U)
+    for (i, j) = zip(upperindex:length(elem), 1:updiff)
+        xval = 0
+        yval = 0
 
-    for (x, y) in (zip(X2, Y2))
-        plot!(
-            Shape([x[1], x[2], x[3], x[4]], [y[1], y[2], y[3], y[4]]),
-            fill = nothing #test[count]
-        )
+        for k = 1:4
+            xval += elem[i][k][1]
+            yval += elem[i][k][2]
+        end
+
+        X3U[j] = sum(xval) / 4
+        Y3U[j] = sum(yval) / 4
     end
-    ###############
 
-    display(grid)
+    display(σ[:, 1])
 
+    # Plot
+    fig, ax = plt.subplots(2, 3, figsize=(5, 5))
 
-    # X3 = zeros(length(X1))
-    # Y3 = zeros(length(Y1))
-    # for i = 1:length(X1)
-    #     X3[i] = mean(X1[i])
-    #     Y3[i] = mean(Y1[i])
-    # end
+    ax[1,1].tricontourf(X3L, Y3L, σ[1:lowerindex, 1],
+                        levels=[findmin(σ[:,1])[1], findmax(σ[:,1])[1]])
+    ax[1,1].tricontourf(X3U, Y3U, σ[upperindex:length(elem), 1],
+                        levels=[findmin(σ[:,1])[1], findmax(σ[:,1])[1]])
+    ax[1,1].set_title(L"σ_{11}")
+    ax[1,2].tricontourf(X3L, Y3L, σ[1:lowerindex, 2],
+                        levels=[findmin(σ[:,2])[1], findmax(σ[:,2])[1]])
+    ax[1,2].tricontourf(X3U, Y3U, σ[upperindex:length(elem), 2],
+                        levels=[findmin(σ[:,2])[1], findmax(σ[:,2])[1]])
+    ax[1,2].set_title(L"σ_{22}")
+    ax[1,3].tricontourf(X3L, Y3L, σ[1:lowerindex, 3],
+                        levels=[findmin(σ[:,3])[1], findmax(σ[:,3])[1]])
+    ax[1,3].tricontourf(X3U, Y3U, σ[upperindex:length(elem), 2],
+                        levels=[findmin(σ[:,3])[1], findmax(σ[:,3])[1]])
+    ax[1,3].set_title(L"σ_{12}")
 
-    # Z3 = σ[:,1]
+    ax[2,1].tricontourf(X3L, Y3L, ϵ[1:lowerindex], 1)
+    ax[2,1].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 1])
+    ax[2,1].set_title(L"ϵ_{11}")
+    ax[2,2].tricontourf(X3L, Y3L, ϵ[1:lowerindex], 2)
+    ax[2,2].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 2])
+    ax[2,2].set_title(L"ϵ_{22}")
+    ax[2,3].tricontourf(X3L, Y3L, ϵ[1:lowerindex], 3)
+    ax[2,3].tricontourf(X3U, Y3U, ϵ[upperindex:length(elem), 3])
+    ax[2,3].set_title(L"γ_{12}")
 
-    # Z3 = zeros(length(X3), length(Y3))
-    # for i = 1:length(X3)
-    #     for j = 1:length(Y3)
-    #         Z3[i,j] = i*j
-    #     end
-    # end
+    for i in ax
+        i.set(xlabel=L"$x_1$", ylabel=L"$x_2$")
+        i.set_aspect("equal")
+    end
+
+    fig.suptitle("Stresses and Strains")
+    fig.tight_layout()
+    # plt.colorbar(ax)
+
+    # ax[2,2].set_title
+    # ax1.legend
+    # ax2.legend
+    # ax1.colorbar
+    # ax2.colorbar
+    plt.show()
 
 end
 
@@ -420,7 +492,9 @@ end
 #--------- MAIN PROGRAM ---------#
 ##################################
 
-function main(points::Int=1000)
+using LinearAlgebra
+
+function main(points::Int=1000, scalefac=1e11)
     ### Generate mesh grid ###
     if points < 20
         println(points, " grid point have be specified.")
@@ -482,7 +556,7 @@ function main(points::Int=1000)
 
     ### Deformation ###
     # Material properties
-    E = 1e7
+    E = 1e10
     ν = 0.31
 
     # Applied load
@@ -534,7 +608,7 @@ function main(points::Int=1000)
     print("Solving for D linearly...")
 
     # Solve
-    Dred = (Fred\Kred)'
+    Dred = (Fred\inv(Kred))'
 
     # Add back fixed nodes
     D = zeros(length(Dred) + length(bc))
@@ -547,8 +621,16 @@ function main(points::Int=1000)
     end
 
     println("done")
-    print("Deforming nodes and elements...")
+    print("Deforming nodes...")
 
+    defxyz = deform(xyz, D, scalefac)
+
+    println("Done")
+
+    ### Calculate stress and strain ###
+    print("Calculating stresses and strains...")
+
+    # Get elemental displacements
     de = zeros(length(dof), 8)
     Threads.@threads for (i, elem) in collect(enumerate(dof))
         for (j, corn) in enumerate(elem)
@@ -558,13 +640,6 @@ function main(points::Int=1000)
 
     # convert de to vector of vectors
     de = [de[i,:] for i in 1:size(de, 1)]
-
-    defxyz, flatelem = deform(xyz, D, elem, de)
-
-    println("Done")
-
-    ### Calculate stress and strain ###
-    print("Calculating stresses and strains...")
 
     σ = zeros(length(elem), 3)
     ϵ = zeros(length(elem), 3)
@@ -578,10 +653,10 @@ function main(points::Int=1000)
     ### Plotting ###
     print("Plotting...")
 
-    graph(flatelem, defxyz, σ)
+    graph(xyz, defxyz, elem, σ, ϵ)
 
     println("Done")
 
 end
 
-main(500)
+main(2000)
