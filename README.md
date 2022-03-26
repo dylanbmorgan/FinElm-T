@@ -1,7 +1,7 @@
 # FinElm-T
 Coursework for PX912 as part of HetSys CDT at the University of Warwick, to perform finite element analysis on a shape, 'T'.
 
-This has been written (pretty much) entirely in Julia so it's pretty quick. Functionality for hyperthreading has also been included to make things even faster, so on most systems, this code is likely to be limited by memory.
+This has been written (pretty much) entirely in Julia so it's pretty quick. Functionality for hyperthreading has also been included to make things even faster, so on most systems, this code is likely to be limited by memory rather than speed. 
 
 ## Installation 
 To install, clone this repository somewhere on your filesystem.
