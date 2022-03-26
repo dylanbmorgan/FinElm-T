@@ -243,14 +243,15 @@ function finelm(
 
     println()
     println("Computed Quantities:")
-    pretty_table(tabledata;
-                 header = (["Quantity", "Mean", "Max", "Min"])
-                 )
+    pretty_table(
+        tabledata;
+        header = (["Quantity", "Mean", "Max", "Min"])
+    )
 
     # Display some run information
    if time == true
         println()
         println("Run information:")
-        print("Total runtime:")
+        print("Total runtime: ")
     end
 end
