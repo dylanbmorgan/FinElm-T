@@ -127,53 +127,53 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
 
     # Components of stress vector
     g1 = ax[1,1].tricontourf(X3, Y3, σ[:,1],
-                             levels=LinRange(findmin(σ[:,1])[1], findmax(σ[:,1])[1], 16))
+                             levels=LinRange(findmin(σ[:,1])[1], findmax(σ[:,1])[1], 20))
     patch1 = patches.Rectangle((0, 0), X3[1], Y3U[1], fc="white")
     patch2 = patches.Rectangle((findmax(X3L)[1], 0), 4, Y3U[1], fc="white")
     ax[1,1].add_patch(patch1)
     ax[1,1].add_patch(patch2)
-    ax[1,1].set_title(L"σ_{11}", fontsize=20)
+    ax[1,1].set_title(L"σ_{11}", fontsize=15)
     fig.colorbar(g1, ax=ax[1,1], shrink=0.7)
 
     g2 = ax[1,2].tricontourf(X3, Y3, σ[:, 2],
-                             levels=LinRange(findmin(σ[:,2])[1], findmax(σ[:,2])[1], 16))
+                             levels=LinRange(findmin(σ[:,2])[1], findmax(σ[:,2])[1], 20))
     patch3 = patches.Rectangle((0, 0), X3[1], Y3U[1], fc="white")
     patch4 = patches.Rectangle((findmax(X3L)[1], 0), 4, Y3U[1], fc="white")
     ax[1,2].add_patch(patch3)
     ax[1,2].add_patch(patch4)
-    ax[1,2].set_title(L"σ_{22}", fontsize=20)
+    ax[1,2].set_title(L"σ_{22}", fontsize=15)
     fig.colorbar(g2, ax=ax[1,2], shrink=0.7)
 
     g3 = ax[1,3].tricontourf(X3, Y3, σ[:, 3],
-                             levels=LinRange(findmin(σ[:,3])[1], findmax(σ[:,3])[1], 16))
+                             levels=LinRange(findmin(σ[:,3])[1], findmax(σ[:,3])[1], 20))
     patch5 = patches.Rectangle((0, 0), X3[1], Y3U[1], fc="white")
     patch6 = patches.Rectangle((findmax(X3L)[1], 0), 4, Y3U[1], fc="white")
     ax[1,3].add_patch(patch5)
     ax[1,3].add_patch(patch6)
-    ax[1,3].set_title(L"σ_{12}", fontsize=20)
+    ax[1,3].set_title(L"σ_{12}", fontsize=15)
     fig.colorbar(g3, ax=ax[1,3], shrink=0.7)
 
     # Components of strain vector
     g4 = ax[2,1].tricontourf(X3, Y3, ϵ[:, 1],
-                             levels=LinRange(findmin(ϵ[:,1])[1], findmax(ϵ[:,1])[1], 16))
+                             levels=LinRange(findmin(ϵ[:,1])[1], findmax(ϵ[:,1])[1], 20))
     patch7 = patches.Rectangle((0, 0), X3[1], Y3U[1], fc="white")
     patch8 = patches.Rectangle((findmax(X3L)[1], 0), 4, Y3U[1], fc="white")
     ax[2,1].add_patch(patch7)
     ax[2,1].add_patch(patch8)
-    ax[2,1].set_title(L"ϵ_{11}", fontsize=20)
+    ax[2,1].set_title(L"ϵ_{11}", fontsize=15)
     fig.colorbar(g4, ax=ax[2,1], shrink=0.7)
 
     g5 = ax[2,2].tricontourf(X3, Y3, ϵ[:, 2],
-                             levels=LinRange(findmin(ϵ[:,2])[1], findmax(ϵ[:,2])[1], 16))
+                             levels=LinRange(findmin(ϵ[:,2])[1], findmax(ϵ[:,2])[1], 20))
     patch9 = patches.Rectangle((0, 0), X3[1], Y3U[1], fc="white")
     patch10 = patches.Rectangle((findmax(X3L)[1], 0), 4, Y3U[1], fc="white")
     ax[2,2].add_patch(patch9)
     ax[2,2].add_patch(patch10)
-    ax[2,2].set_title(L"ϵ_{22}", fontsize=20)
+    ax[2,2].set_title(L"ϵ_{22}", fontsize=15)
     fig.colorbar(g5, ax=ax[2,2], shrink=0.7)
 
     g6 = ax[2,3].tricontourf(X3, Y3, ϵ[:, 3],
-                             levels=LinRange(findmin(ϵ[:,3])[1], findmax(ϵ[:,3])[1], 16))
+                             levels=LinRange(findmin(ϵ[:,3])[1], findmax(ϵ[:,3])[1], 20))
     patch11 = patches.Rectangle((0, 0), X3[1], Y3U[1], fc="white")
     patch12 = patches.Rectangle((findmax(X3L)[1], 0), 4, Y3U[1], fc="white")
     ax[2,3].add_patch(patch11)

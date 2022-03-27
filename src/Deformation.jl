@@ -139,8 +139,9 @@ function deform(xyz, D, scalefac)
     end
 
     # Deform nodes including scaling factor
-    D .*= scalefac
-    defxyz .+= D
+    scaleD = copy(D)
+    scaleD .*= scalefac
+    defxyz .+= scaleD
 
     return defxyz
 end

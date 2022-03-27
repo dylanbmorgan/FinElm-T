@@ -94,7 +94,10 @@ function finelm(
     # Solid nodes concatenated with duplicates removed
     xyz = union(xyz1, xyz2)
 
-    println(length(xyz), " nodes used"); println()
+    println("################")
+    println(length(xyz), " nodes used")
+    println("################")
+    println()
 
     # Combine elements from 2 solid shapes
     elem = vcat(elem1, elem2)
@@ -230,7 +233,7 @@ function finelm(
     prepend!(ϵ3, ["γ_12"])
 
     # Format data to be displayed in table
-    tabledata = permutedims([tableD;; σ1;; σ2;; ϵ1;; ϵ2;; ϵ3])
+    tabledata = permutedims([tableD;; σ1;; σ2;; σ3;; ϵ1;; ϵ2;; ϵ3])
 
     println("Done")
 
@@ -241,11 +244,23 @@ function finelm(
 
     println("Done")
 
+    # Output data
     println()
-    println("Computed Quantities:")
+    println("###########################")
+    println("### Computed Quantities ###")
+    println("###########################")
     pretty_table(
         tabledata;
         header = (["Quantity", "Mean", "Max", "Min"])
+    )
+    println()
+    println("###########################################")
+    println("### Computed Quantities in LaTeX format ###")
+    println("###########################################")
+    pretty_table(
+        tabledata;
+        header = (["Quantity", "Mean", "Max", "Min"]),
+        backend = Val(:latex)
     )
 
     # Display some run information
