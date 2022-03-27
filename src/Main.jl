@@ -211,9 +211,9 @@ function finelm(
     ϵ2 = []
     ϵ3 = []
 
-    append!(tableD, round(mean(D), sigdigits=6))
-    append!(tableD, round(findmax(D)[1], sigdigits=6))
-    append!(tableD, round(findmin(D)[1], sigdigits=6))
+    append!(tableD, round(mean(broadcast(abs, D)), sigdigits=6))
+    append!(tableD, round(findmax(broadcast(abs, D))[1], sigdigits=6))
+    append!(tableD, round(findmin(broadcast(abs, D))[1], sigdigits=6))
 
     for i = 1:3
         append!(σ1, round(mean(broadcast(abs, σ[:,i])), sigdigits=6))
@@ -226,8 +226,8 @@ function finelm(
 
     prepend!(tableD, ["D"])
     prepend!(σ1, ["σ_11"])
-    prepend!(σ2, ["σ_12"])
-    prepend!(σ3, ["σ_22"])
+    prepend!(σ2, ["σ_22"])
+    prepend!(σ3, ["σ_12"])
     prepend!(ϵ1, ["ϵ_11"])
     prepend!(ϵ2, ["ϵ_22"])
     prepend!(ϵ3, ["γ_12"])

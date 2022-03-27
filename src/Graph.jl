@@ -178,7 +178,7 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
     patch12 = patches.Rectangle((findmax(X3L)[1], 0), 4, Y3U[1], fc="white")
     ax[2,3].add_patch(patch11)
     ax[2,3].add_patch(patch12)
-    ax[2,3].set_title(L"γ_{12}", fontsize=20)
+    ax[2,3].set_title(L"γ_{12}", fontsize=15)
     fig.colorbar(g6, ax=ax[2,3], shrink=0.7)
 
     # Adjust some parameters
@@ -201,4 +201,53 @@ function graph(xyz, defxyz, elem, σ, ϵ, interactive, figpath)
         plt.savefig("$(figpath)strainstress.png")
         plt.show()
     end
+end
+
+function plottime()
+    # Data from runs
+    runtime = [2.49, 2.51, 2.57, 2.64, 3.97, 9.70, 30.74, 60.47, 110.09, 325.88, 778.40, 1214.02]
+    nnodes = [160, 337, 576, 882, 2176, 4060, 6506, 8448, 10665, 15861, 20420, 23780]
+
+    # Plot
+    display(plot(
+        nnodes, runtime,
+        yaxis = :log,
+        marker = :circle,
+        markersize = 3,
+        legend = :none,
+        xlabel = "Number of Nodes",
+        ylabel = "Total Run Time (log) / sec"
+    ))
+end
+
+function plotconv()
+    # Data from runs
+    meanD = [5.37614e-13, 7.66974e-13, 1.02092e-12, 1.28569e-12, 1.9914e-12, 2.97906e-12, 3.54956e-12,
+             3.9345e-12, 4.48195e-12, 5.64084e-12, 6.3608e-12, 6.68799e-12]
+    maxD = [1.69578e-12, 2.48807e-12, 3.18746e-12, 4.02003e-12, 6.17745e-12, 9.65003e-12, 1.11053e-11,
+            1.21609e-11, 1.39048e-11, 1.77602e-11, 2.00271e-11, 2.06977e-11]
+    nnodes = [160, 337, 576, 882, 2176, 4060, 6506, 8448, 10665, 15861, 20420, 23780]
+
+    # plot
+    graph = plot(
+        nnodes, meanD,
+        marker = :circle,
+        markersize = 3, markerstrokewidth = 0.5,
+        legend = :right,
+        label = "Average Displacement",
+        ylim = (1e-13, 2.1e-11),
+        yticks = (1e-13:2.5e-12:2.5e-11),
+        xlabel = "Number of Nodes",
+        ylabel = "Displacement / m",
+    )
+
+    plot!(
+        nnodes, maxD,
+        marker = :square,
+        markersize = 2.4, markerstrokewidth = 0.5,
+        label = "Maximum Displacement"
+    )
+
+    # display(graph)
+    savefig("/home/dylanmorgan/Documents/warwick/chapter_1/px912/assignments/solids/report/figures/d_convergence.png")
 end
